@@ -1,0 +1,115 @@
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  .kai-reports-chart-box { min-height: 280px; position: relative; width: 100%; overflow: hidden; }
+  .kai-reports-chart-box canvas { width: 100% !important; max-width: 100% !important; }
+  /* IEX reports: fixed chart heights — avoid h-100 column stretch leaving empty space under charts */
+  .kai-reports-iex-mcp-trend {
+    min-height: 0;
+    height: 300px;
+    max-height: min(360px, 42vh);
+  }
+  .kai-reports-iex-mcp-donut-wrap {
+    min-height: 220px;
+    height: 260px;
+    max-height: min(280px, 35vh);
+    flex-shrink: 0;
+  }
+  .page-inner { overflow-x: hidden; }
+  .kai-dashboard-1 .main-panel > .container {
+    min-height: auto !important;
+    height: auto !important;
+  }
+  .kai-reports-section .card-head-row { align-items: flex-start; }
+  @media (min-width: 768px) {
+    .kai-reports-section .card-head-row { align-items: center; }
+  }
+  .kai-stat-row .card-stats { height: 100%; min-height: 132px; }
+  .kai-stat-row .card-stats .card-body { min-height: 120px; display: flex; align-items: center; }
+  .kai-stat-row .card-stats .numbers { width: 100%; }
+  .kai-reports-kpi-card {
+    border: 1px solid rgba(21, 114, 232, 0.18);
+    box-shadow: 0 6px 24px rgba(21, 114, 232, 0.1);
+    overflow: hidden;
+  }
+  .kai-reports-section-card {
+    border: 1px solid rgba(21, 114, 232, 0.18);
+    box-shadow: 0 6px 24px rgba(21, 114, 232, 0.1);
+    overflow: hidden;
+  }
+  .kai-reports-gradient-header {
+    background: linear-gradient(135deg, #1572e8 0%, #1269db 48%, #0d5bbd 100%) !important;
+    border: none !important;
+    padding-top: 1rem !important;
+    padding-bottom: 1rem !important;
+    box-shadow: 0 3px 12px rgba(21, 114, 232, 0.35);
+  }
+  .kai-reports-gradient-header .card-title {
+    color: #fff !important;
+    font-weight: 700;
+  }
+  .kai-reports-gradient-header .text-muted {
+    color: rgba(255, 255, 255, 0.88) !important;
+  }
+  .kai-reports-control {
+    min-height: calc(1.5em + 0.5rem + 2px);
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    background: rgba(255, 255, 255, 0.96);
+    border-radius: 8px;
+    font-weight: 600;
+    color: #1a1d2e;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  }
+  .kai-reports-control:focus {
+    border-color: #fff;
+    background: #fff;
+    box-shadow: 0 0 0 0.2rem rgba(255, 255, 255, 0.45);
+    outline: none;
+  }
+  .kai-reports-chart-inner {
+    border-radius: 12px;
+    border: 1px solid rgba(21, 114, 232, 0.15);
+    background: #fff;
+    padding: 1rem 1rem 0.5rem;
+    box-shadow: inset 0 1px 0 rgba(21, 114, 232, 0.06);
+  }
+  .kai-edit-slots-wrap.kai-reports-table-wrap {
+    max-height: none;
+    box-shadow: 0 4px 18px rgba(21, 114, 232, 0.08);
+  }
+  .kai-edit-slots-table {
+    margin-bottom: 0;
+    --bs-table-striped-bg: rgba(21, 114, 232, 0.055);
+    --bs-table-hover-bg: rgba(21, 114, 232, 0.12);
+    border-color: transparent;
+  }
+  .kai-edit-slots-table thead th {
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: #fff !important;
+    border: none !important;
+    padding-top: 0.75rem !important;
+    padding-bottom: 0.75rem !important;
+    background: linear-gradient(135deg, #1572e8 0%, #1269db 48%, #0d5bbd 100%) !important;
+    box-shadow: 0 2px 8px rgba(21, 114, 232, 0.25);
+  }
+  .kai-edit-slots-table tbody td {
+    vertical-align: middle;
+    border-color: rgba(21, 114, 232, 0.1);
+  }
+  .kai-reports-grid-card {
+    border: 1px solid rgba(21, 114, 232, 0.18);
+    box-shadow: 0 4px 16px rgba(21, 114, 232, 0.08);
+    overflow: hidden;
+  }
+  .kai-reports-gradient-header .btn-label-primary {
+    background: rgba(255, 255, 255, 0.22);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    color: #fff !important;
+  }
+  .kai-reports-gradient-header .btn-label-primary:hover {
+    background: rgba(255, 255, 255, 0.35);
+    color: #fff !important;
+  }
+</style>

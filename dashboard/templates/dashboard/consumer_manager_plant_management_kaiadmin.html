@@ -1,0 +1,784 @@
+{% extends "dashboard/consumer_manager_base_kaiadmin.html" %}
+{% load static %}
+
+{% block title %}Plant Management — ViewMetric{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* Match generator schedule slot table (generator_allocation_edit.html) */
+  .kai-edit-slots-wrap {
+    max-height: min(70vh, 620px);
+    overflow: auto;
+    border-radius: 12px;
+    border: 1px solid rgba(21, 114, 232, 0.18);
+    box-shadow: 0 6px 24px rgba(21, 114, 232, 0.1);
+    background: #fff;
+  }
+  .kai-edit-slots-table {
+    margin-bottom: 0;
+    --bs-table-striped-bg: rgba(21, 114, 232, 0.055);
+    --bs-table-hover-bg: rgba(21, 114, 232, 0.12);
+    border-color: transparent;
+  }
+  .kai-edit-slots-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: #fff !important;
+    border: none !important;
+    padding-top: 0.9rem !important;
+    padding-bottom: 0.9rem !important;
+    background: linear-gradient(135deg, #1572e8 0%, #1269db 48%, #0d5bbd 100%) !important;
+    box-shadow: 0 3px 10px rgba(21, 114, 232, 0.35);
+  }
+  .kai-edit-slots-table tbody td {
+    vertical-align: middle;
+    padding-top: 0.55rem;
+    padding-bottom: 0.55rem;
+    border-color: rgba(21, 114, 232, 0.1);
+  }
+  .kai-slot-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.1rem;
+    padding: 0.28rem 0.55rem;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 0.8rem;
+    line-height: 1;
+    color: #fff;
+    background: linear-gradient(135deg, #6861ce 0%, #4c4b9e 100%);
+    box-shadow: 0 2px 8px rgba(104, 97, 206, 0.35);
+  }
+  .kai-slot-pill.alt {
+    background: linear-gradient(135deg, #1572e8 0%, #0d5bbd 100%);
+    box-shadow: 0 2px 8px rgba(21, 114, 232, 0.3);
+  }
+  .kai-time-label {
+    color: #1269db;
+    font-weight: 600;
+  }
+  .cm-pm-metric {
+    display: inline-block;
+    min-width: 4.25rem;
+    padding: 0.35rem 0.65rem;
+    border: 1px solid rgba(108, 117, 125, 0.28);
+    background: rgba(108, 117, 125, 0.14);
+    border-radius: 8px;
+    font-weight: 600;
+    color: #495057;
+    text-align: right;
+    font-size: 0.875rem;
+  }
+  /* Modal slot grids: same header as main table, shorter scroll area */
+  .kai-edit-slots-modal-wrap {
+    max-height: min(52vh, 400px);
+  }
+  .kai-edit-slots-table input.kai-tariff-slot-input.form-control {
+    max-width: 7.5rem;
+    border: 1px solid rgba(21, 114, 232, 0.4);
+    background: rgba(21, 114, 232, 0.07);
+    font-weight: 600;
+    color: #1a1d2e;
+    border-radius: 8px;
+  }
+  .kai-edit-slots-table input.kai-tariff-slot-input.form-control:focus {
+    border-color: #1572e8;
+    background: #fff;
+    box-shadow: 0 0 0 0.2rem rgba(21, 114, 232, 0.22);
+  }
+  .cm-pm-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1050;
+    padding: 1rem;
+  }
+  .cm-pm-modal-overlay.hidden {
+    display: none !important;
+  }
+  .cm-pm-modal-content {
+    background: #fff;
+    padding: 1.5rem;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+    max-width: 600px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+    border: 1px solid rgba(21, 114, 232, 0.12);
+  }
+  .cm-pm-modal-content.wide {
+    max-width: 720px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+            <div class="mb-3 pt-2">
+              <div class="page-pretitle">Plant portfolio</div>
+              <h3 class="fw-bold mb-1">Plant Management</h3>
+              <p class="text-muted small mb-0" style="max-width: 40rem">
+                Tariffs, transmission loss, and plant users for your portfolio.
+              </p>
+            </div>
+
+            <div class="row">
+              <div class="col-12">
+                <div class="card card-round">
+                  <div class="card-header">
+                    <div class="card-head-row">
+                      <div class="card-title">Your Plants (Tariffs &amp; Transmission Loss)</div>
+                    </div>
+                  </div>
+                  <div class="card-body">
+                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                      <span class="text-muted small fw-semibold text-uppercase" style="letter-spacing: 0.06em">Plants</span>
+                      <div class="d-flex flex-wrap align-items-center gap-2">
+                        <button type="button" id="exportPlantsTableBtn" class="btn btn-sm btn-outline-success">
+                          <span class="btn-label"><i class="fas fa-file-excel"></i></span>
+                          Export Excel
+                        </button>
+                        <small class="text-muted" id="plantsTableHint">All plants linked to your account.</small>
+                      </div>
+                    </div>
+                    <div class="kai-edit-slots-wrap table-responsive">
+                      <table class="table table-striped table-hover align-middle kai-edit-slots-table mb-0" id="plantsTable">
+                        <thead>
+                          <tr>
+                            <th style="width: 72px">#</th>
+                            <th>Name</th>
+                            <th>Location</th>
+                            <th style="min-width: 140px">Max consumption/day</th>
+                            <th style="min-width: 120px">Avg tariff (Rs/u)</th>
+                            <th style="width: 88px">Year</th>
+                            <th>State loss (%)</th>
+                            <th>Central loss (%)</th>
+                            <th class="text-end" style="min-width: 120px">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody></tbody>
+                      </table>
+                    </div>
+                    <p class="text-muted small mt-3 mb-0">
+                      Click <strong>Update</strong> to edit slot-wise tariffs (96 values) and transmission loss in the dialog.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="row mt-4">
+              <div class="col-12">
+                <div class="card card-round">
+                  <div class="card-header">
+                    <div class="card-head-row">
+                      <div class="card-title">Create Plant User (and Plant)</div>
+                    </div>
+                  </div>
+                  <div class="card-body">
+                    <form id="createPlantUserForm">
+                      <div class="row">
+                        <div class="col-md-6">
+                          <div class="form-group">
+                            <label class="form-label" for="plantName">Plant Name</label>
+                            <input id="plantName" type="text" required class="form-control" />
+                          </div>
+                        </div>
+                        <div class="col-md-6">
+                          <div class="form-group">
+                            <label class="form-label" for="plantLocation">Location</label>
+                            <input id="plantLocation" type="text" required class="form-control" />
+                          </div>
+                        </div>
+                      </div>
+                      <div class="row">
+                        <div class="col-md-6">
+                          <div class="form-group">
+                            <label class="form-label" for="maxConsumptionPerDay">Max consumption per/day</label>
+                            <input id="maxConsumptionPerDay" type="number" step="0.0001" min="0" required class="form-control" />
+                          </div>
+                        </div>
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label">Slot tariff difference (96 × 15-min, Rs/unit)</label>
+                        <div class="d-flex flex-wrap align-items-center gap-2">
+                          <button class="btn btn-warning btn-sm" id="btnOpenTariffModal" type="button">Enter slot tariffs</button>
+                          <span id="tariffSummary" class="text-muted small"></span>
+                        </div>
+                      </div>
+                      <div class="row">
+                        <div class="col-md-4">
+                          <div class="form-group">
+                            <label class="form-label" for="tlYear">Transmission Loss Year</label>
+                            <input id="tlYear" type="number" required class="form-control" />
+                          </div>
+                        </div>
+                        <div class="col-md-4">
+                          <div class="form-group">
+                            <label class="form-label" for="tlStateValue">State Transmission Loss (%)</label>
+                            <input id="tlStateValue" type="number" step="0.01" required class="form-control" />
+                          </div>
+                        </div>
+                        <div class="col-md-4">
+                          <div class="form-group">
+                            <label class="form-label" for="tlCentralValue">Central Transmission Loss (%)</label>
+                            <input id="tlCentralValue" type="number" step="0.01" required class="form-control" />
+                          </div>
+                        </div>
+                      </div>
+                      <div class="row">
+                        <div class="col-md-6">
+                          <div class="form-group">
+                            <label class="form-label" for="plantUserEmpid">Plant User EmpID</label>
+                            <input id="plantUserEmpid" type="text" required class="form-control" />
+                          </div>
+                        </div>
+                        <div class="col-md-6">
+                          <div class="form-group">
+                            <label class="form-label" for="plantUserEmail">Plant User Email</label>
+                            <input id="plantUserEmail" type="email" required class="form-control" />
+                          </div>
+                        </div>
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label" for="plantUserPassword">Plant User Password</label>
+                        <input id="plantUserPassword" type="password" required class="form-control" style="max-width: 24rem" />
+                      </div>
+                      <div class="form-group mt-3">
+                        <button class="btn btn-primary" type="submit">Create Plant User</button>
+                        <div id="consumerManagerMsg" class="text-muted small mt-2" aria-live="polite"></div>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div id="hourlyTariffModal" class="cm-pm-modal-overlay hidden" role="dialog" aria-labelledby="modalTitle" aria-modal="true">
+              <div class="cm-pm-modal-content">
+                <h5 id="modalTitle" class="fw-bold mb-2">Slot tariff difference (Rs/unit)</h5>
+                <p class="text-muted small mb-2">
+                  Enter grid − RE tariff difference for each 15-minute slot (96 per day). Two decimal places (e.g. 2.30, 3.15).
+                </p>
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                  <span class="text-muted small fw-semibold text-uppercase" style="letter-spacing: 0.06em">Slots</span>
+                  <small class="text-muted">All 96 quarter-hour slots.</small>
+                </div>
+                <div class="kai-edit-slots-wrap table-responsive kai-edit-slots-modal-wrap">
+                  <table class="table table-sm table-striped table-hover align-middle kai-edit-slots-table mb-0" id="hourlyTariffTable">
+                    <thead>
+                      <tr>
+                        <th style="width: 72px">S.No</th>
+                        <th style="min-width: 140px">Time slot</th>
+                        <th>Tariff (Rs/u)</th>
+                      </tr>
+                    </thead>
+                    <tbody id="hourlyTariffTbody"></tbody>
+                  </table>
+                </div>
+                <div class="d-flex justify-content-end gap-2 mt-3">
+                  <button class="btn btn-secondary btn-sm" id="btnCloseTariffModal" type="button">Cancel</button>
+                  <button class="btn btn-primary btn-sm" id="btnApplyTariffModal" type="button">Apply</button>
+                </div>
+              </div>
+            </div>
+
+            <div id="plantUpdateModal" class="cm-pm-modal-overlay hidden" role="dialog" aria-labelledby="plantUpdateModalTitle" aria-modal="true">
+              <div class="cm-pm-modal-content wide">
+                <h5 id="plantUpdateModalTitle" class="fw-bold mb-2">Update plant</h5>
+                <p class="text-muted small mb-3">
+                  <span id="plantEditName" class="fw-semibold text-body"></span>
+                  <span class="text-muted mx-1">·</span>
+                  <span id="plantEditLocation"></span>
+                </p>
+                <div class="row g-3 mb-3">
+                  <div class="col-sm-4">
+                    <label class="form-label small" for="plantEditMaxConsumption">Max consumption per/day</label>
+                    <input type="number" id="plantEditMaxConsumption" step="0.0001" min="0" class="form-control form-control-sm" />
+                  </div>
+                  <div class="col-sm-4">
+                    <label class="form-label small" for="plantEditTlYear">Transmission loss year</label>
+                    <input type="number" id="plantEditTlYear" class="form-control form-control-sm" />
+                  </div>
+                  <div class="col-sm-4">
+                    <label class="form-label small" for="plantEditTlState">State loss (%)</label>
+                    <input type="number" id="plantEditTlState" step="0.01" class="form-control form-control-sm" />
+                  </div>
+                  <div class="col-sm-4">
+                    <label class="form-label small" for="plantEditTlCentral">Central loss (%)</label>
+                    <input type="number" id="plantEditTlCentral" step="0.01" class="form-control form-control-sm" />
+                  </div>
+                </div>
+                <h6 class="fw-semibold mb-2">Slot tariff difference (96 × 15-min, Rs/unit)</h6>
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                  <span class="text-muted small fw-semibold text-uppercase" style="letter-spacing: 0.06em">Tariff grid</span>
+                  <small class="text-muted">All 96 quarter-hour slots.</small>
+                </div>
+                <div class="kai-edit-slots-wrap table-responsive kai-edit-slots-modal-wrap">
+                  <table class="table table-sm table-striped table-hover align-middle kai-edit-slots-table mb-0">
+                    <thead>
+                      <tr>
+                        <th style="width: 72px">S.No</th>
+                        <th style="min-width: 140px">Time slot</th>
+                        <th>Tariff (Rs/u)</th>
+                      </tr>
+                    </thead>
+                    <tbody id="plantEditTariffTbody"></tbody>
+                  </table>
+                </div>
+                <div id="plantUpdateMsg" class="small mt-3" aria-live="polite"></div>
+                <div class="d-flex justify-content-end gap-2 mt-3">
+                  <button class="btn btn-secondary btn-sm" id="btnClosePlantUpdateModal" type="button">Cancel</button>
+                  <button class="btn btn-primary btn-sm" id="btnSavePlantUpdate" type="button">Save</button>
+                </div>
+              </div>
+            </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<script>
+(function () {
+  var fetchWithAuth = window.kaiFetchWithAuth;
+  if (!fetchWithAuth) return;
+
+  function exportTableToExcel(tableId, fileName) {
+    var table = document.getElementById(tableId);
+    if (!table || !window.XLSX) return;
+
+    var rows = [];
+    var headers = Array.from(table.querySelectorAll('thead th')).map(function (th) {
+      return (th.textContent || '').trim();
+    });
+    rows.push(headers);
+
+    Array.from(table.querySelectorAll('tbody tr')).forEach(function (tr) {
+      if (tr.classList.contains('d-none')) return;
+      var cells = Array.from(tr.querySelectorAll('td')).map(function (td) {
+        return (td.textContent || '').replace(/\s+/g, ' ').trim();
+      });
+      if (cells.length) rows.push(cells);
+    });
+
+    var ws = XLSX.utils.aoa_to_sheet(rows);
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Plants');
+    XLSX.writeFile(wb, fileName);
+  }
+
+  function normalizeRole(r) {
+    if (r == null || r === '') return null;
+    var s = String(r).trim();
+    var u = s.toUpperCase().replace(/\s+/g, '_');
+    if (u === 'CONSUMER_MANAGER' || u === 'CONSUMERMANAGER') return 'CONSUMER_MANAGER';
+    if (u === 'PLATFORM_ADMIN' || u === 'PLATFORMADMIN') return 'PLATFORM_ADMIN';
+    if (u === 'PLANT_USER' || u === 'PLANTUSER') return 'PLANT_USER';
+    if (u === 'GENERATOR') return 'GENERATOR';
+    return s;
+  }
+
+  function escapeHtml(s) {
+    if (s == null || s === '') return '';
+    var d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  var SLOT_TARIFF_COUNT = 96;
+  var createFormHourlyTariff = new Array(SLOT_TARIFF_COUNT).fill(0);
+  var plantEditModalPlantId = null;
+
+  function slotTimeLabel(slotIdx0) {
+    var start = slotIdx0 * 15;
+    var end = (slotIdx0 + 1) * 15;
+    function fmt(m) {
+      if (m >= 1440) return '24:00';
+      var h = Math.floor(m / 60);
+      var min = m % 60;
+      return String(h).padStart(2, '0') + ':' + String(min).padStart(2, '0');
+    }
+    return fmt(start) + '–' + fmt(end);
+  }
+
+  function normalizeTariffArrayForUi(a) {
+    if (Array.isArray(a) && a.length === SLOT_TARIFF_COUNT) {
+      return a.map(function (v) { return parseFloat(v) || 0; });
+    }
+    if (Array.isArray(a) && a.length === 24) {
+      var out = [];
+      for (var i = 0; i < 24; i++) {
+        var v = parseFloat(a[i]) || 0;
+        for (var j = 0; j < 4; j++) out.push(v);
+      }
+      return out;
+    }
+    return new Array(SLOT_TARIFF_COUNT).fill(0);
+  }
+
+  function formatTariffSlotDisplay(v) {
+    var n = parseFloat(v);
+    if (Number.isNaN(n)) return '0.00';
+    return n.toFixed(2);
+  }
+
+  function buildHourlyTariffRows(values) {
+    var arr = normalizeTariffArrayForUi(values);
+    return Array.from({ length: SLOT_TARIFF_COUNT }, function (_, i) {
+      var pillClass = i % 2 === 0 ? 'kai-slot-pill' : 'kai-slot-pill alt';
+      return (
+        '<tr>' +
+        '<td><span class="' +
+        pillClass +
+        '">' +
+        (i + 1) +
+        '</span></td>' +
+        '<td><span class="kai-time-label">' +
+        slotTimeLabel(i) +
+        '</span></td>' +
+        '<td><input class="form-control form-control-sm tariffDiffInput kai-tariff-slot-input" type="number" step="0.01" min="0" data-slot="' +
+        i +
+        '" value="' +
+        formatTariffSlotDisplay(arr[i]) +
+        '" /></td></tr>'
+      );
+    }).join('');
+  }
+
+  function wireTariffInputsTwoDecimals(el) {
+    if (!el) return;
+    el.querySelectorAll('.tariffDiffInput').forEach(function (inp) {
+      inp.addEventListener('blur', function () {
+        var n = parseFloat(inp.value);
+        if (!Number.isNaN(n)) inp.value = n.toFixed(2);
+      });
+    });
+  }
+
+  function openHourlyTariffModal(values, context) {
+    var modal = document.getElementById('hourlyTariffModal');
+    var tbody = document.getElementById('hourlyTariffTbody');
+    if (!modal || !tbody) return;
+    tbody.innerHTML = buildHourlyTariffRows(values);
+    wireTariffInputsTwoDecimals(tbody);
+    var base = normalizeTariffArrayForUi(values);
+    if (context === 'create-consumer') createFormHourlyTariff = base;
+    modal.classList.remove('hidden');
+  }
+
+  function closeHourlyTariffModal() {
+    var modal = document.getElementById('hourlyTariffModal');
+    if (modal) modal.classList.add('hidden');
+  }
+
+  function collectHourlyTariffFromModal() {
+    var inputs = document.querySelectorAll('#hourlyTariffModal .tariffDiffInput');
+    var arr = Array(SLOT_TARIFF_COUNT).fill(0);
+    inputs.forEach(function (inp) {
+      var i = parseInt(inp.getAttribute('data-slot'), 10);
+      if (i >= 0 && i < SLOT_TARIFF_COUNT) arr[i] = parseFloat(inp.value) || 0;
+    });
+    return arr;
+  }
+
+  function collectPlantEditTariffFromModal() {
+    var inputs = document.querySelectorAll('#plantUpdateModal .tariffDiffInput');
+    var arr = Array(SLOT_TARIFF_COUNT).fill(0);
+    inputs.forEach(function (inp) {
+      var i = parseInt(inp.getAttribute('data-slot'), 10);
+      if (i >= 0 && i < SLOT_TARIFF_COUNT) arr[i] = parseFloat(inp.value) || 0;
+    });
+    return arr;
+  }
+
+  function openPlantUpdateModal(p, hourlyValues) {
+    plantEditModalPlantId = p.id;
+    var modal = document.getElementById('plantUpdateModal');
+    var tbody = document.getElementById('plantEditTariffTbody');
+    var msg = document.getElementById('plantUpdateMsg');
+    if (!modal || !tbody) return;
+    document.getElementById('plantEditName').textContent = p.name || '';
+    document.getElementById('plantEditLocation').textContent = p.location || '';
+    document.getElementById('plantEditMaxConsumption').value = p.max_consumption_per_day ?? '';
+    document.getElementById('plantEditTlYear').value = p.transmission_loss_year ?? '';
+    document.getElementById('plantEditTlState').value = p.state_transition_loss_value ?? '';
+    document.getElementById('plantEditTlCentral').value = p.central_transmission_loss_value ?? '';
+    tbody.innerHTML = buildHourlyTariffRows(hourlyValues);
+    wireTariffInputsTwoDecimals(tbody);
+    if (msg) {
+      if (p.tariff_is_legacy_24h) {
+        var t =
+          'Tariffs are stored as 24 hourly values (each hour is copied to four 15-min slots). Old hourly data used 3.2 for some hours, which shows as 3.20 — not 3.15 per slot. ';
+        var nm = String(p.name || '').toLowerCase();
+        if (nm.indexOf('dahej') >= 0) {
+          t += 'Run: python manage.py seed_dahej_tariff then reopen.';
+        } else if (nm.indexOf('selaqui') >= 0) {
+          t += 'Run: python manage.py seed_selaqui_tariff then reopen.';
+        } else {
+          t += 'Replace by entering 96 slot values and Save.';
+        }
+        msg.textContent = t;
+        msg.className = 'small mt-3 alert alert-warning py-2 px-3 mb-0';
+      } else {
+        msg.textContent = '';
+        msg.className = 'small mt-3';
+      }
+    }
+    modal.classList.remove('hidden');
+  }
+
+  function closePlantUpdateModal() {
+    var modal = document.getElementById('plantUpdateModal');
+    if (modal) modal.classList.add('hidden');
+    plantEditModalPlantId = null;
+  }
+
+  async function loadPlants() {
+    var tbody = document.querySelector('#plantsTable tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    var res;
+    try {
+      res = await fetchWithAuth('/api/plants/');
+    } catch (e) {
+      return;
+    }
+    var data = await res.json().catch(function () {
+      return {};
+    });
+    if (!res.ok) {
+      var detail = data && data.detail ? String(data.detail) : 'Failed to load plants (HTTP ' + res.status + ')';
+      tbody.innerHTML = '<tr><td colspan="9">' + escapeHtml(detail) + '</td></tr>';
+      return;
+    }
+
+    function htd(p) {
+      return normalizeTariffArrayForUi(p.hourly_tariff_difference);
+    }
+    function avgDiff(arr) {
+      return arr.reduce(function (a, b) {
+        return a + (parseFloat(b) || 0);
+      }, 0) / SLOT_TARIFF_COUNT;
+    }
+    var plantTariffCache = {};
+    var rows = (data.results || [])
+      .map(function (p, idx) {
+        var arr = htd(p);
+        plantTariffCache[p.id] = arr;
+        var avg = avgDiff(arr).toFixed(2);
+        var pillClass = idx % 2 === 0 ? 'kai-slot-pill' : 'kai-slot-pill alt';
+        return (
+          '<tr>' +
+          '<td><span class="' +
+          pillClass +
+          '">' +
+          (idx + 1) +
+          '</span></td>' +
+          '<td><span class="fw-semibold text-dark">' +
+          escapeHtml(p.name) +
+          '</span></td>' +
+          '<td><span class="kai-time-label">' +
+          escapeHtml(p.location) +
+          '</span></td>' +
+          '<td class="text-end"><span class="cm-pm-metric">' +
+          escapeHtml(String(p.max_consumption_per_day ?? '0')) +
+          '</span></td>' +
+          '<td class="text-end"><span class="cm-pm-metric">' +
+          avg +
+          '</span></td>' +
+          '<td class="text-end"><span class="cm-pm-metric">' +
+          escapeHtml(String(p.transmission_loss_year ?? '')) +
+          '</span></td>' +
+          '<td class="text-end"><span class="cm-pm-metric">' +
+          escapeHtml(String(p.state_transition_loss_value ?? '')) +
+          '</span></td>' +
+          '<td class="text-end"><span class="cm-pm-metric">' +
+          escapeHtml(String(p.central_transmission_loss_value ?? '')) +
+          '</span></td>' +
+          '<td class="text-end text-nowrap">' +
+          '<button class="btn btn-sm btn-primary btnPlantUpdate" type="button" data-plant-id="' +
+          p.id +
+          '">' +
+          '<span class="btn-label"><i class="fas fa-pen"></i></span> Update' +
+          '</button></td></tr>'
+        );
+      })
+      .join('');
+
+    tbody.innerHTML = rows;
+
+    tbody.querySelectorAll('button.btnPlantUpdate').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var plantId = parseInt(btn.getAttribute('data-plant-id'), 10);
+        var p = (data.results || []).find(function (x) {
+          return x.id === plantId;
+        });
+        if (!p) return;
+        openPlantUpdateModal(p, plantTariffCache[plantId]);
+      });
+    });
+  }
+
+  function boot() {
+    document.getElementById('btnOpenTariffModal') &&
+      document.getElementById('btnOpenTariffModal').addEventListener('click', function () {
+        openHourlyTariffModal(createFormHourlyTariff, 'create-consumer');
+      });
+    document.getElementById('btnCloseTariffModal') &&
+      document.getElementById('btnCloseTariffModal').addEventListener('click', closeHourlyTariffModal);
+    document.getElementById('btnApplyTariffModal') &&
+      document.getElementById('btnApplyTariffModal').addEventListener('click', function () {
+        var arr = collectHourlyTariffFromModal();
+        createFormHourlyTariff = arr;
+        var avg = arr.reduce(function (a, b) {
+          return a + b;
+        }, 0) / SLOT_TARIFF_COUNT;
+        var ts = document.getElementById('tariffSummary');
+        if (ts)
+          ts.textContent =
+            'Avg: ' + avg.toFixed(2) + ' Rs/u (' + arr.filter(function (v) { return v !== 0; }).length + ' slots set)';
+        closeHourlyTariffModal();
+      });
+    document.getElementById('hourlyTariffModal') &&
+      document.getElementById('hourlyTariffModal').addEventListener('click', function (e) {
+        if (e.target.id === 'hourlyTariffModal') closeHourlyTariffModal();
+      });
+
+    document.getElementById('btnClosePlantUpdateModal') &&
+      document.getElementById('btnClosePlantUpdateModal').addEventListener('click', closePlantUpdateModal);
+    document.getElementById('plantUpdateModal') &&
+      document.getElementById('plantUpdateModal').addEventListener('click', function (e) {
+        if (e.target.id === 'plantUpdateModal') closePlantUpdateModal();
+      });
+    document.getElementById('btnSavePlantUpdate') &&
+      document.getElementById('btnSavePlantUpdate').addEventListener('click', async function () {
+        var pid = plantEditModalPlantId;
+        var msg = document.getElementById('plantUpdateMsg');
+        if (!pid) return;
+        var hourly_tariff_difference = collectPlantEditTariffFromModal();
+        var maxConsumption = parseFloat(document.getElementById('plantEditMaxConsumption').value);
+        var year = parseInt(document.getElementById('plantEditTlYear').value, 10);
+        var stateVal = parseFloat(document.getElementById('plantEditTlState').value);
+        var centralVal = parseFloat(document.getElementById('plantEditTlCentral').value);
+        if (msg) {
+          msg.textContent = 'Saving…';
+          msg.className = 'small mt-3 text-muted';
+        }
+        var resT = await fetchWithAuth('/api/plants/' + pid + '/tariff/', {
+          method: 'PATCH',
+          body: JSON.stringify({
+            max_consumption_per_day: maxConsumption,
+            hourly_tariff_difference: hourly_tariff_difference,
+          }),
+        });
+        var dataT = await resT.json().catch(function () {
+          return {};
+        });
+        if (!resT.ok) {
+          if (msg) {
+            msg.textContent = dataT.detail || 'Tariff update failed';
+            msg.className = 'small mt-3 text-danger';
+          }
+          return;
+        }
+        var resL = await fetchWithAuth('/api/plants/' + pid + '/transmission-loss/', {
+          method: 'PATCH',
+          body: JSON.stringify({
+            year: year,
+            state_transition_loss_value: stateVal,
+            central_transmission_loss_value: centralVal,
+          }),
+        });
+        var dataL = await resL.json().catch(function () {
+          return {};
+        });
+        if (!resL.ok) {
+          if (msg) {
+            msg.textContent = dataL.detail || 'Transmission loss update failed';
+            msg.className = 'small mt-3 text-danger';
+          }
+          return;
+        }
+        closePlantUpdateModal();
+        await loadPlants();
+      });
+
+    var plantForm = document.getElementById('createPlantUserForm');
+    if (plantForm) {
+      plantForm.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        var payload = {
+          plant_name: document.getElementById('plantName').value,
+          location: document.getElementById('plantLocation').value,
+          max_consumption_per_day: parseFloat(document.getElementById('maxConsumptionPerDay').value),
+          hourly_tariff_difference: createFormHourlyTariff.map(function (v) {
+            return parseFloat(v) || 0;
+          }),
+          transmission_loss_year: parseInt(document.getElementById('tlYear').value, 10),
+          state_transition_loss_value: parseFloat(document.getElementById('tlStateValue').value),
+          central_transmission_loss_value: parseFloat(document.getElementById('tlCentralValue').value),
+          plant_user_empid: document.getElementById('plantUserEmpid').value,
+          plant_user_email: document.getElementById('plantUserEmail').value,
+          plant_user_password: document.getElementById('plantUserPassword').value,
+        };
+        var res = await fetchWithAuth('/api/create-plant-user/', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        var data = await res.json().catch(function () {
+          return {};
+        });
+        var out = document.getElementById('consumerManagerMsg');
+        if (out) out.textContent = res.ok ? 'Plant user created.' : data.detail || 'Create failed';
+        if (res.ok) await loadPlants();
+      });
+    }
+
+    var y = document.getElementById('tlYear');
+    if (y && !y.value) y.value = new Date().getFullYear();
+
+    loadPlants();
+
+    var exportPlantsTableBtn = document.getElementById('exportPlantsTableBtn');
+    if (exportPlantsTableBtn) {
+      exportPlantsTableBtn.addEventListener('click', function () {
+        exportTableToExcel('plantsTable', 'consumer_plants.xlsx');
+      });
+    }
+  }
+
+  fetchWithAuth('/api/me/')
+    .then(function (r) {
+      return r.json().then(function (me) {
+        return { ok: r.ok, me: me };
+      });
+    })
+    .then(function (x) {
+      if (!x.ok || !x.me) {
+        window.location.href = '/login/?expired=1';
+        return;
+      }
+      var role = normalizeRole(x.me.role);
+      if (role !== 'CONSUMER_MANAGER') {
+        if (role === 'PLATFORM_ADMIN') window.location.href = '/platform-admin-dashboard/';
+        else if (role === 'GENERATOR') window.location.href = '/generator-dashboard/';
+        else window.location.href = '/dashboard/';
+        return;
+      }
+      boot();
+    })
+    .catch(function () {
+      window.location.href = '/login/';
+    });
+})();
+</script>
+{% endblock %}

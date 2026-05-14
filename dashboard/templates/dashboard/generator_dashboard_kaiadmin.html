@@ -1,0 +1,401 @@
+{% extends "dashboard/generator_base_kaiadmin.html" %}
+{% load static %}
+
+{% block title %}Dashboard — ViewMetric{% endblock %}
+
+{% block kai_vendor_scripts %}
+  <script src="{% static 'kaiadmin/assets/js/plugin/chart.js/chart.min.js' %}"></script>
+{% endblock %}
+
+{% block content %}
+            <div class="row kai-stat-row g-3 pt-2">
+              <div class="col-6 col-lg-3 d-flex">
+                <div class="card card-stats card-round w-100">
+                  <div class="card-body">
+                    <div class="row align-items-center">
+                      <div class="col-icon">
+                        <div class="icon-big text-center icon-primary bubble-shadow-small"><i class="fas fa-check-double"></i></div>
+                      </div>
+                      <div class="col col-stats ms-3 ms-sm-0">
+                        <div class="numbers">
+                          <p class="card-category">Total approved supply <small class="text-muted fw-normal" data-kpi-heading-bracket></small></p>
+                          <h4 class="card-title" id="kpiApproved">—</h4>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-6 col-lg-3 d-flex">
+                <div class="card card-stats card-round w-100">
+                  <div class="card-body">
+                    <div class="row align-items-center">
+                      <div class="col-icon">
+                        <div class="icon-big text-center icon-info bubble-shadow-small"><i class="fas fa-bolt"></i></div>
+                      </div>
+                      <div class="col col-stats ms-3 ms-sm-0">
+                        <div class="numbers">
+                          <p class="card-category">Total supply scheduled <small class="text-muted fw-normal" data-kpi-heading-bracket></small></p>
+                          <h4 class="card-title" id="kpiSupply">—</h4>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-6 col-lg-3 d-flex">
+                <div class="card card-stats card-round w-100">
+                  <div class="card-body">
+                    <div class="row align-items-center">
+                      <div class="col-icon">
+                        <div class="icon-big text-center icon-success bubble-shadow-small"><i class="fas fa-exchange-alt"></i></div>
+                      </div>
+                      <div class="col col-stats ms-3 ms-sm-0">
+                        <div class="numbers">
+                          <p class="card-category">IEX allocations <small class="text-muted fw-normal" data-kpi-heading-bracket></small></p>
+                          <h4 class="card-title" id="kpiIex">—</h4>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-6 col-lg-3 d-flex">
+                <div class="card card-stats card-round w-100">
+                  <div class="card-body">
+                    <div class="row align-items-center">
+                      <div class="col-icon">
+                        <div class="icon-big text-center icon-secondary bubble-shadow-small"><i class="fas fa-calendar-check"></i></div>
+                      </div>
+                      <div class="col col-stats ms-3 ms-sm-0">
+                        <div class="numbers">
+                          <p class="card-category">Total days scheduled <small class="text-muted fw-normal" data-kpi-heading-bracket></small></p>
+                          <h4 class="card-title" id="kpiDays">—</h4>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="row mt-5 pt-2">
+              <div class="col-12">
+                <div class="border rounded-3 shadow-sm overflow-hidden bg-white">
+                  <div class="row g-0 align-items-stretch kai-split-panel">
+                    <div class="col-lg-8">
+                      <div class="card card-round border-0 shadow-none h-100 rounded-0">
+                        <div class="card-header bg-white border-bottom">
+                          <div class="card-head-row">
+                            <div class="card-title">Supply vs allocated <small class="text-muted fw-normal">(histogram)</small><small class="text-muted fw-normal" id="histCardBracket"></small></div>
+                            <div class="card-tools d-flex flex-wrap align-items-center gap-2">
+                              <select id="graphRange" class="form-select form-select-sm" style="min-width: 11rem" aria-label="Date range">
+                                <option value="yesterday">Yesterday</option>
+                                <option value="today">Today</option>
+                                <option value="tomorrow">Tomorrow</option>
+                                <option value="next7" selected>Next 7 days</option>
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="card-body">
+                          <div class="chart-container" style="min-height: 320px">
+                            <canvas id="supplyAllocChart"></canvas>
+                          </div>
+                          <div id="supplyAllocLegend" class="mt-2"></div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="col-lg-4 bg-primary">
+                      <div class="card card-primary card-round border-0 shadow-none h-100 rounded-0" style="background: transparent">
+                        <div class="card-header border-bottom border-white border-opacity-25" style="background: transparent">
+                          <div class="card-head-row">
+                            <div class="card-title text-white">Plant approved energy <small class="text-white-50 fw-normal" id="plantTitleBracket"></small></div>
+                            <div class="card-tools">
+                              <select id="plantSelect" class="form-select form-select-sm text-dark" style="min-width: 10rem; max-width: 12rem" aria-label="Plant">
+                                <option value="">— Plant —</option>
+                              </select>
+                            </div>
+                          </div>
+                          <div class="card-category text-white-50" id="plantCardSub">Total approved gross for <strong>today</strong> (selected plant)</div>
+                        </div>
+                        <div class="card-body pb-3">
+                          <div class="mb-2 mt-1">
+                            <h2 class="text-white mb-0" id="plantApprovedLabel">—</h2>
+                            <small class="text-white-50" id="plantApprovedName"></small>
+                          </div>
+                          <div class="pull-in" style="min-height: 160px">
+                            <canvas id="plantLineChart"></canvas>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+  var fetchWithAuth = window.kaiFetchWithAuth;
+  if (!fetchWithAuth) return;
+
+  var supplyAllocChart = null;
+  var plantLineChart = null;
+
+  function slotLabels96() {
+    var a = [];
+    for (var i = 0; i < 96; i++) {
+      var m = i * 15;
+      var h = Math.floor(m / 60);
+      var mm = m % 60;
+      a.push((h < 10 ? '0' : '') + h + ':' + (mm < 10 ? '0' : '') + mm);
+    }
+    return a;
+  }
+
+  function fmtNum(x) {
+    var n = parseFloat(x);
+    if (isNaN(n)) return '—';
+    return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  }
+
+  function renderSupplyAlloc(data) {
+    var s = data.series || {};
+    var ctx = document.getElementById('supplyAllocChart');
+    if (!ctx) return;
+    if (supplyAllocChart) supplyAllocChart.destroy();
+    supplyAllocChart = new Chart(ctx.getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: s.labels || [],
+        datasets: [
+          {
+            type: 'bar',
+            label: 'Supply (MWh)',
+            backgroundColor: 'rgba(23, 125, 255, 0.65)',
+            borderColor: '#177dff',
+            borderWidth: 1,
+            data: s.supply_mwh || [],
+          },
+          {
+            type: 'line',
+            label: 'Allocated (MWh)',
+            fill: false,
+            backgroundColor: 'rgba(243, 84, 93, 0.15)',
+            borderColor: '#f3545d',
+            borderWidth: 2,
+            pointRadius: 2,
+            pointBackgroundColor: '#f3545d',
+            pointBorderColor: '#fff',
+            pointBorderWidth: 1,
+            lineTension: 0.1,
+            data: s.allocated_mwh || [],
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        legend: { display: true, position: 'bottom' },
+        tooltips: { mode: 'index', intersect: false },
+        scales: {
+          xAxes: [{ gridLines: { display: false }, ticks: { maxRotation: 45, minRotation: 0 } }],
+          yAxes: [{ ticks: { beginAtZero: true }, gridLines: { color: 'rgba(0,0,0,0.06)' } }],
+        },
+      },
+    });
+  }
+
+  function updatePlantCardSubtitle(payload) {
+    var meta = payload.plant_card_meta || {};
+    var gross = meta.gross_subtitle != null ? String(meta.gross_subtitle) : (meta.day_label || 'today');
+    var el = document.getElementById('plantCardSub');
+    if (el) {
+      var strongInner =
+        typeof window.vmWrapDayLabelStrong === 'function'
+          ? window.vmWrapDayLabelStrong(gross)
+          : '<strong>' + gross + '</strong>';
+      el.innerHTML = 'Total approved gross for ' + strongInner + ' (selected plant)';
+    }
+  }
+
+  function plantLineChartOptions(labels) {
+    return {
+      responsive: true,
+      maintainAspectRatio: false,
+      legend: { display: false },
+      tooltips: {
+        mode: 'index',
+        intersect: false,
+        callbacks: {
+          title: function (items) {
+            if (!items || !items.length) return '';
+            var i = items[0].index;
+            return (labels[i] || '') + ' (15 min)';
+          },
+        },
+      },
+      scales: {
+        yAxes: [
+          {
+            scaleLabel: { display: true, labelString: 'MWh / slot', fontColor: 'rgba(255,255,255,0.75)' },
+            ticks: { beginAtZero: true, fontColor: 'rgba(255,255,255,0.9)' },
+            gridLines: { color: 'rgba(255,255,255,0.2)' },
+          },
+        ],
+        xAxes: [
+          {
+            ticks: {
+              fontColor: 'rgba(255,255,255,0.85)',
+              maxRotation: 45,
+              minRotation: 0,
+              autoSkip: true,
+              maxTicksLimit: 24,
+            },
+            gridLines: { color: 'rgba(255,255,255,0.12)', zeroLineColor: 'rgba(255,255,255,0.2)' },
+          },
+        ],
+      },
+    };
+  }
+
+  function renderPlantBar(payload) {
+    var ctx = document.getElementById('plantLineChart');
+    if (!ctx) return;
+    if (plantLineChart) plantLineChart.destroy();
+    var meta = payload.plant_card_meta || {};
+    var dayLbl = meta.gross_subtitle != null ? String(meta.gross_subtitle) : (meta.day_label || 'today');
+    var pt = payload.plant_tomorrow;
+    var lbl = document.getElementById('plantApprovedLabel');
+    var nm = document.getElementById('plantApprovedName');
+    var labels = slotLabels96();
+    var zeros = labels.map(function () { return 0; });
+    var hasVal = pt && pt.approved_mwh != null && pt.approved_mwh !== '';
+    if (!hasVal) {
+      if (lbl) lbl.textContent = '—';
+      if (nm) {
+        nm.textContent = document.getElementById('plantSelect').value
+          ? 'No data for ' + String(dayLbl).toLowerCase()
+          : 'Select a plant';
+      }
+      plantLineChart = new Chart(ctx.getContext('2d'), {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: 'Approved gross (MWh)',
+              data: zeros,
+              borderColor: 'rgba(255,255,255,0.25)',
+              backgroundColor: 'rgba(255,255,255,0.06)',
+              borderWidth: 1,
+              pointRadius: 0,
+              lineTension: 0.1,
+              fill: true,
+            },
+          ],
+        },
+        options: plantLineChartOptions(labels),
+      });
+      return;
+    }
+    if (pt.slot_labels && pt.slot_labels.length) labels = pt.slot_labels;
+    var series = (pt.approved_mwh_slots || zeros).map(function (x) {
+      var n = parseFloat(x);
+      return isNaN(n) ? 0 : n;
+    });
+    if (series.length !== labels.length) {
+      while (series.length < labels.length) series.push(0);
+      series = series.slice(0, labels.length);
+    }
+    var v = parseFloat(pt.approved_mwh) || 0;
+    if (lbl) lbl.textContent = fmtNum(v) + ' MWh';
+    if (nm) nm.textContent = pt.plant_name || '';
+    plantLineChart = new Chart(ctx.getContext('2d'), {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: 'Approved gross (MWh)',
+            data: series,
+            borderColor: 'rgba(255,255,255,0.95)',
+            backgroundColor: 'rgba(255,255,255,0.12)',
+            borderWidth: 2,
+            pointRadius: 0,
+            pointHitRadius: 6,
+            lineTension: 0.15,
+            fill: true,
+          },
+        ],
+      },
+      options: plantLineChartOptions(labels),
+    });
+  }
+
+  function fillPlants(plants) {
+    var sel = document.getElementById('plantSelect');
+    if (!sel) return;
+    var cur = sel.value;
+    sel.innerHTML = '<option value="">— Plant —</option>';
+    (plants || []).forEach(function (p) {
+      var o = document.createElement('option');
+      o.value = p.id;
+      o.textContent = p.name;
+      sel.appendChild(o);
+    });
+    if (cur) sel.value = cur;
+  }
+
+  function updateCardHeadingBrackets(payload) {
+    var kb = (payload.kpis && payload.kpis.heading_bracket) || 'Real time';
+    document.querySelectorAll('[data-kpi-heading-bracket]').forEach(function (el) {
+      window.vmSetBracketLabel(el, kb);
+    });
+    var gh = payload.graph_heading_bracket || 'Today';
+    var hb = document.getElementById('histCardBracket');
+    if (hb) window.vmSetBracketLabel(hb, gh);
+    var meta = payload.plant_card_meta || {};
+    var pl = meta.day_label || 'Real time';
+    var pb = document.getElementById('plantTitleBracket');
+    if (pb) window.vmSetBracketLabel(pb, pl);
+  }
+
+  function applyKpis(payload) {
+    var k = payload.kpis || {};
+    document.getElementById('kpiApproved').textContent = fmtNum(k.total_approved_supply_mwh) + ' MWh';
+    document.getElementById('kpiSupply').textContent = fmtNum(k.total_supply_scheduled_mwh) + ' MWh';
+    var iexDisp = k.iex_allocations_display_mwh != null ? k.iex_allocations_display_mwh : (parseFloat(k.iex_allocations_mwh) > 1 ? k.iex_allocations_mwh : '0');
+    document.getElementById('kpiIex').textContent = fmtNum(iexDisp) + ' MWh';
+    document.getElementById('kpiDays').textContent = String(k.total_days_scheduled != null ? k.total_days_scheduled : '—');
+  }
+
+  async function loadAll() {
+    var gr = document.getElementById('graphRange').value;
+    var pid = document.getElementById('plantSelect').value;
+    var url = '/api/generator/dashboard-kai/?graph_range=' + encodeURIComponent(gr);
+    if (pid) url += '&plant_id=' + encodeURIComponent(pid);
+    var res = await fetchWithAuth(url);
+    var payload = await res.json().catch(function () { return {}; });
+    if (!res.ok) {
+      alert(payload.detail || 'Could not load dashboard.');
+      return;
+    }
+    applyKpis(payload);
+    updateCardHeadingBrackets(payload);
+    fillPlants(payload.plants);
+    if (pid) document.getElementById('plantSelect').value = pid;
+    updatePlantCardSubtitle(payload);
+    renderSupplyAlloc(payload);
+    renderPlantBar(payload);
+  }
+
+  document.getElementById('graphRange').addEventListener('change', loadAll);
+  document.getElementById('plantSelect').addEventListener('change', loadAll);
+  loadAll();
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,1502 @@
+<script>
+(function () {
+  var KAI_PRIMARY = '#1572e8';
+  var KAI_PRIMARY_FILL = 'rgba(21, 114, 232, 0.78)';
+  var KAI_SECONDARY = '#E8B84C';
+  var KAI_SECONDARY_FILL = 'rgba(232, 184, 76, 0.85)';
+  var KAI_RED = '#f3545d';
+  var KAI_TEAL = '#2F7D6B';
+  var VM_PRIMARY = KAI_PRIMARY;
+  var VM_SECONDARY = KAI_SECONDARY;
+  var VM_GRAY = '#D1D5DB';
+
+  var fetchWithAuth = window.kaiFetchWithAuth;
+  if (!fetchWithAuth) return;
+
+  var SECTIONS = ['demand', 'allocation'];
+  var CONSUMER_SECTIONS = ['cmOverview'];
+
+  var histogramBarOptions = {
+    categoryPercentage: 0.98,
+    barPercentage: 0.92,
+    borderRadius: 4,
+    borderSkipped: false,
+  };
+
+  window.switchView = function (section, view) {
+    ['graph', 'table', 'grid'].forEach(function (v) {
+      var el = document.getElementById(section + '-' + v);
+      if (el) el.classList.toggle('d-none', v !== view);
+    });
+  };
+
+  var charts = { demand: null, allocation: null, cmOverview: null, cmRevision: null, cmSlotDay: null };
+  var sectionData = {};
+  var cmSlotLoadSeq = 0;
+  var cmReportsSlotDayCache = {
+    date: '',
+    plantId: '',
+    plantName: '',
+    panel: null,
+    plants: [],
+  };
+  var cmRevisionCache = {
+    date: '',
+    mode: 'revision2',
+    rows: [],
+    plantId: '',
+    plantName: '',
+  };
+  var cmRevisionLoadSeq = 0;
+
+  function copySectionPayload(data) {
+    return {
+      scope: data.scope,
+      kpis: Object.assign({}, data.kpis || {}),
+      demand_only: !!data.demand_only,
+      series: JSON.parse(JSON.stringify(data.series || [])),
+    };
+  }
+
+  function destroyChart(key) {
+    try {
+      if (charts[key]) charts[key].destroy();
+    } catch (e) {}
+    charts[key] = null;
+  }
+
+  function destroyCmSlotDayChart() {
+    try {
+      if (charts.cmSlotDay) charts.cmSlotDay.destroy();
+    } catch (e) {}
+    charts.cmSlotDay = null;
+  }
+
+  function toggleReportsLayout(scope) {
+    var isConsumer = scope === 'consumer';
+    document.querySelectorAll('.reports-admin-only').forEach(function (el) {
+      el.classList.toggle('d-none', isConsumer);
+    });
+    document.querySelectorAll('.reports-consumer-only').forEach(function (el) {
+      el.classList.toggle('d-none', !isConsumer);
+    });
+    var foot = document.getElementById('reportsKpiFootnote');
+    var footCm = document.getElementById('reportsKpiFootnoteConsumer');
+    if (foot) foot.classList.toggle('d-none', isConsumer);
+    if (footCm) footCm.classList.toggle('d-none', !isConsumer);
+  }
+
+  function fmtNum(x, d) {
+    var n = parseFloat(x);
+    if (Number.isNaN(n)) return '—';
+    return n.toFixed(d != null ? d : 2);
+  }
+
+  function inclusiveDayCount(fromStr, toStr) {
+    if (!fromStr || !toStr) return 0;
+    var a = new Date(fromStr + 'T12:00:00');
+    var b = new Date(toStr + 'T12:00:00');
+    if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return 0;
+    return Math.round((b - a) / 86400000) + 1;
+  }
+
+  function updateRangeHint(section, fromStr, toStr, rowCount) {
+    var el = document.getElementById('rangeHint-' + section);
+    if (!el) return;
+    if (!fromStr || !toStr) {
+      el.textContent = '';
+      return;
+    }
+    var n = inclusiveDayCount(fromStr, toStr);
+    var msg =
+      'Each row is one calendar day. Inclusive range: ' +
+      n +
+      ' day' +
+      (n === 1 ? '' : 's') +
+      ' (' +
+      fromStr +
+      ' → ' +
+      toStr +
+      ').';
+    if (rowCount != null && rowCount !== n) {
+      msg += ' Showing ' + rowCount + ' row(s).';
+    }
+    el.textContent = msg;
+  }
+
+  var iexRepTrendChart = null;
+  var iexRepDonutChart = null;
+
+  function destroyIexRepPredictorCharts() {
+    try { if (iexRepTrendChart) iexRepTrendChart.destroy(); } catch (e) {}
+    try { if (iexRepDonutChart) iexRepDonutChart.destroy(); } catch (e) {}
+    iexRepTrendChart = null;
+    iexRepDonutChart = null;
+  }
+
+  function slotIndexToTimeBlock(slotIndex) {
+    var startMins = (slotIndex - 1) * 15;
+    var endMins = slotIndex * 15;
+    var fmt = function (mins) {
+      var h = Math.floor(mins / 60) % 24;
+      var m = mins % 60;
+      return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+    };
+    return fmt(startMins) + ' - ' + fmt(endMins);
+  }
+
+  function renderIexRepPredictorCharts(slots) {
+    destroyIexRepPredictorCharts();
+    var mcpValues = (slots || []).map(function (s) { return Number(s.predicted_mcp_rs_per_kwh); }).filter(function (v) { return Number.isFinite(v); });
+    ['iexRepAvgMcp', 'iexRepMaxMcp', 'iexRepMinMcp', 'iexRepHighSlots'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.textContent = '—';
+    });
+    if (!mcpValues.length) return;
+
+    var avg = mcpValues.reduce(function (a, b) { return a + b; }, 0) / mcpValues.length;
+    document.getElementById('iexRepAvgMcp').textContent = avg.toFixed(2);
+    document.getElementById('iexRepMaxMcp').textContent = Math.max.apply(null, mcpValues).toFixed(2);
+    document.getElementById('iexRepMinMcp').textContent = Math.min.apply(null, mcpValues).toFixed(2);
+    document.getElementById('iexRepHighSlots').textContent = String(mcpValues.filter(function (v) { return v > 5; }).length);
+
+    var labels = (slots || []).map(function (s, idx) {
+      return (s.time_block && s.time_block.trim()) ? s.time_block : slotIndexToTimeBlock(s.slot_index || (idx + 1));
+    });
+
+    var trendCtx = document.getElementById('iexRepMcpTrend');
+    if (trendCtx) {
+      iexRepTrendChart = new Chart(trendCtx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Predicted MCP (₹/kWh)',
+            data: (slots || []).map(function (s) { return Number(s.predicted_mcp_rs_per_kwh) || 0; }),
+            borderColor: KAI_PRIMARY,
+            backgroundColor: 'rgba(21, 114, 232, 0.15)',
+            tension: 0.35,
+            borderWidth: 2,
+            pointRadius: 0,
+            fill: true,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { intersect: false, mode: 'index' },
+          plugins: { legend: { labels: { color: '#374151' } } },
+          scales: {
+            x: {
+              ticks: { maxRotation: 45, autoSkip: true, maxTicksLimit: 24, color: '#6B7280' },
+              grid: { display: false },
+            },
+            y: {
+              beginAtZero: true,
+              title: { display: true, text: '₹/kWh', color: '#6B7280' },
+              ticks: { color: '#6B7280' },
+              grid: { color: '#E5E7EB' },
+            },
+          },
+        },
+      });
+      window.requestAnimationFrame(function () {
+        try { if (iexRepTrendChart) iexRepTrendChart.resize(); } catch (e) {}
+      });
+    }
+
+    var levelCount = { LOW: 0, MEDIUM: 0, HIGH: 0, OTHER: 0 };
+    (slots || []).forEach(function (s) {
+      var p = String(s.price_level || '').trim().toUpperCase();
+      if (p === 'LOW') levelCount.LOW++;
+      else if (p === 'MEDIUM') levelCount.MEDIUM++;
+      else if (p === 'HIGH') levelCount.HIGH++;
+      else levelCount.OTHER++;
+    });
+    var donutCtx = document.getElementById('iexRepMcpDonut');
+    if (donutCtx) {
+      iexRepDonutChart = new Chart(donutCtx, {
+        type: 'doughnut',
+        data: {
+          labels: ['LOW', 'MEDIUM', 'HIGH', 'Other'],
+          datasets: [{
+            data: [levelCount.LOW, levelCount.MEDIUM, levelCount.HIGH, levelCount.OTHER],
+            backgroundColor: [KAI_PRIMARY, KAI_SECONDARY, VM_GRAY, '#9CA3AF'],
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: '70%',
+          plugins: { legend: { position: 'bottom', labels: { color: '#374151', boxWidth: 12 } } },
+        },
+      });
+      window.requestAnimationFrame(function () {
+        try { if (iexRepDonutChart) iexRepDonutChart.resize(); } catch (e) {}
+      });
+    }
+  }
+
+  async function loadIexMcpPredictorReports() {
+    var statusEl = document.getElementById('iexMcpPredStatus');
+    var deniedEl = document.getElementById('iexMcpPredictorDenied');
+    var contentEl = document.getElementById('iexMcpPredictorContent');
+    var dirCard = document.getElementById('iexRepDirectionalCard');
+    var dirVal = document.getElementById('iexRepDirectionalVal');
+    if (!statusEl || !deniedEl || !contentEl) return;
+
+    deniedEl.classList.add('d-none');
+    deniedEl.textContent = '';
+    contentEl.classList.add('d-none');
+    destroyIexRepPredictorCharts();
+    statusEl.textContent = 'Loading MCP predictions…';
+
+    var res;
+    try {
+      res = await fetchWithAuth('/api/iex-scraped-predictions/?delivery_period=yesterday');
+    } catch (e) {
+      statusEl.textContent = '';
+      return;
+    }
+    var data = await res.json().catch(function () { return {}; });
+
+    if (res.status === 403) {
+      deniedEl.textContent = (data && data.detail) ? data.detail : 'MCP prediction charts are available for Consumer Manager users. Use IEX Predictor for the slot table.';
+      deniedEl.classList.remove('d-none');
+      statusEl.textContent = '';
+      return;
+    }
+    if (!res.ok) {
+      deniedEl.textContent = (data && data.detail) ? data.detail : 'Could not load MCP predictions.';
+      deniedEl.classList.remove('d-none');
+      statusEl.textContent = '';
+      return;
+    }
+
+    var slots = data.slots || [];
+    deniedEl.classList.add('d-none');
+    contentEl.classList.remove('d-none');
+
+    if (slots.length === 0) {
+      renderIexRepPredictorCharts([]);
+      statusEl.textContent = 'No prediction rows returned.';
+      if (dirCard) dirCard.classList.add('d-none');
+      return;
+    }
+
+    renderIexRepPredictorCharts(slots);
+
+    if (data.has_actual && data.directional_accuracy_pct != null && dirCard && dirVal) {
+      dirCard.classList.remove('d-none');
+      dirVal.textContent = data.directional_accuracy_pct;
+    } else if (dirCard) {
+      dirCard.classList.add('d-none');
+    }
+
+    var mode = data.has_actual ? 'Includes actual where provided on ViewMetric' : 'Prediction only';
+    var src = data.source ? ' · ' + data.source : '';
+    statusEl.textContent = 'Showing ' + slots.length + ' slots. ' + mode + src;
+  }
+
+  function setDefaultDateInputsFor(prefixes, series) {
+    if (!series.length) {
+      var today = new Date().toISOString().split('T')[0];
+      prefixes.forEach(function (sec) {
+        var f = document.getElementById('fromDate-' + sec);
+        var t = document.getElementById('toDate-' + sec);
+        if (f) f.value = today;
+        if (t) t.value = today;
+      });
+      return;
+    }
+    var first = series[0].date;
+    var last = series[series.length - 1].date;
+    prefixes.forEach(function (sec) {
+      var f = document.getElementById('fromDate-' + sec);
+      var to = document.getElementById('toDate-' + sec);
+      if (f) f.value = first;
+      if (to) to.value = last;
+    });
+  }
+
+  function setDefaultDateInputs(series) {
+    setDefaultDateInputsFor(SECTIONS, series);
+  }
+
+  function tomorrowIsoDate() {
+    var d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().split('T')[0];
+  }
+
+  function yesterdayIsoDate() {
+    var d = new Date();
+    d.setDate(d.getDate() - 1);
+    return d.toISOString().split('T')[0];
+  }
+
+  function cardHtml(dateLabel, sub, val, unit) {
+    return '<div class="col-6 col-md-4 col-lg-3"><div class="card card-round h-100 kai-reports-grid-card">' +
+      '<div class="card-body p-3 text-center">' +
+      '<p class="text-muted small mb-1">' + sub + '</p>' +
+      '<p class="text-muted mb-2" style="font-size:0.75rem">' + dateLabel + '</p>' +
+      '<p class="h5 text-primary mb-0">' + val + ' <span class="fs-6 fw-normal text-muted">' + unit + '</span></p></div></div></div>';
+  }
+
+  function emptyRowHtml(colspan, msg) {
+    return '<tr><td colspan="' + colspan + '" class="py-4 text-center text-muted small">' + msg + '</td></tr>';
+  }
+
+  function csvEscapeCell(cell) {
+    var s = String(cell == null ? '' : cell);
+    if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  }
+
+  function downloadCsv(filename, rows) {
+    var bom = '\uFEFF';
+    var lines = rows.map(function (row) {
+      return row.map(csvEscapeCell).join(',');
+    });
+    var blob = new Blob([bom + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function exportCmOverviewCsv() {
+    var fromEl = document.getElementById('fromDate-cmOverview');
+    var toEl = document.getElementById('toDate-cmOverview');
+    var viewEl = document.getElementById('view-cmOverview');
+    var d = sectionData.cmOverview;
+    if (!d || !d.series || !d.series.length) {
+      window.alert('No data to export. Select From / To dates and wait for the chart to load.');
+      return;
+    }
+    var rows = [['Date', 'Supply (MWh)', 'Approved (MWh)', 'IEX (MWh)', 'Demand (MWh)']];
+    d.series.forEach(function (s) {
+      var v = rowValsConsumerOverview(s);
+      rows.push([
+        s.date != null ? String(s.date) : String(s.date_label || ''),
+        fmtNum(v.sup, 4),
+        fmtNum(v.appr, 4),
+        fmtNum(v.ix, 4),
+        fmtNum(v.dem, 4),
+      ]);
+    });
+    var from = fromEl && fromEl.value ? fromEl.value : '';
+    var to = toEl && toEl.value ? toEl.value : '';
+    var view = viewEl && viewEl.value ? viewEl.value : 'graph';
+    var fname =
+      'consumer-reports-overview_' +
+      from +
+      '_to_' +
+      to +
+      '_view-' +
+      String(view).replace(/[^\w-]+/g, '_') +
+      '.csv';
+    downloadCsv(fname, rows);
+  }
+
+  function exportCmRevisionCsv() {
+    var c = cmRevisionCache || {};
+    if (!c.rows || !c.rows.length) {
+      window.alert('No data to export. Select a valid date and revision first.');
+      return;
+    }
+    var mode = c.mode || 'revision2';
+    var revisionLabel = mode === 'submitted' ? 'Submitted schedule' : mode === 'revision1' ? 'Revision 1' : 'Latest revision';
+    var rows = [
+      ['Date', 'Plant id', 'Plant name', 'Revision', 'Slot index', 'Time', 'Demand (MWh)', 'Selected revision (MWh)', 'Difference (MWh)'],
+    ];
+    c.rows.forEach(function (r) {
+      rows.push([
+        c.date || '',
+        c.plantId || '',
+        c.plantName || '',
+        revisionLabel,
+        String(r.slot_index),
+        r.time_label || '',
+        fmtNum(r.demand, 6),
+        fmtNum(r.selected, 6),
+        fmtNum(r.diff, 6),
+      ]);
+    });
+    var fname =
+      'consumer-reports-revision_' +
+      String(c.date || 'day').replace(/[^\w-]+/g, '_') +
+      '_mode-' +
+      String(mode).replace(/[^\w-]+/g, '_') +
+      '.csv';
+    downloadCsv(fname, rows);
+  }
+
+  function exportCmReportsSlotDayCsv() {
+    var c = cmReportsSlotDayCache;
+    if (!c.panel || !c.panel.slot_labels || !c.panel.slot_labels.length) {
+      window.alert('Load slot data first (select day and plant), then export.');
+      return;
+    }
+    var labels = c.panel.slot_labels;
+    var sup = c.panel.supply_mwh || [];
+    var dem = c.panel.demand_mwh || [];
+    var diff = c.panel.difference_mwh || [];
+    var rows = [
+      [
+        'Date',
+        'Plant id',
+        'Plant name',
+        'Slot index',
+        'Time',
+        'Approved supply (MWh)',
+        'Demand (MWh)',
+        'Difference (MWh)',
+      ],
+    ];
+    for (var i = 0; i < labels.length; i++) {
+      rows.push([
+        c.date || '',
+        c.plantId || '',
+        c.plantName || '',
+        String(i + 1),
+        labels[i] || '',
+        fmtNum(sup[i], 6),
+        fmtNum(dem[i], 6),
+        fmtNum(diff[i], 6),
+      ]);
+    }
+    var fname =
+      'consumer-reports-day-slots_' +
+      (c.date || 'day') +
+      '_plant-' +
+      String(c.plantId || 'na').replace(/[^\w-]+/g, '_') +
+      '.csv';
+    downloadCsv(fname, rows);
+  }
+
+  function renderDemandPart(scope, series, kpis) {
+    document.getElementById('demandTableBody').innerHTML = series.length
+      ? series.map(function (s) {
+          return '<tr><td>' + (s.date_label || s.date) + '</td><td class="text-end">' + fmtNum(s.demand_mwh, 4) + '</td></tr>';
+        }).join('')
+      : emptyRowHtml(2, 'No rows in this date range.');
+    document.getElementById('demand-grid').innerHTML = series.length
+      ? series.map(function (s) {
+          return cardHtml(s.date_label || s.date, 'Demand', fmtNum(s.demand_mwh, 2), 'MWh');
+        }).join('')
+      : '<div class="col-12"><p class="text-muted small text-center py-4 mb-0">No data in range.</p></div>';
+
+    var labels = series.map(function (s) { return s.date_label || s.date; });
+    var demandData = series.map(function (s) { return parseFloat(s.demand_mwh) || 0; });
+    destroyChart('demand');
+    var demandCtx = document.getElementById('demandChart');
+    charts.demand = new Chart(demandCtx, {
+      type: 'bar',
+      data: {
+        labels: labels.length ? labels : ['—'],
+        datasets: [{
+          label: 'Demand (MWh)',
+          data: labels.length ? demandData : [0],
+          backgroundColor: KAI_PRIMARY_FILL,
+          borderColor: KAI_PRIMARY,
+          borderWidth: 1,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: '#374151' } } },
+        datasets: { bar: histogramBarOptions },
+        scales: {
+          x: { ticks: { color: '#6B7280' }, grid: { display: false }, offset: true },
+          y: { beginAtZero: true, ticks: { color: '#6B7280' }, grid: { color: '#E5E7EB' } },
+        },
+      },
+    });
+  }
+
+  function renderAllocationPart(scope, series, kpis) {
+    var allocHead = document.getElementById('allocationTheadRow');
+    var allocBody = document.getElementById('allocationTableBody');
+    var allocGrid = document.getElementById('allocation-grid');
+
+    if (scope === 'admin') {
+      allocHead.innerHTML = '<th>Date</th><th>Demand (MWh)</th><th>Scheduled supply (ref.)</th>';
+      allocBody.innerHTML = series.length
+        ? series.map(function (s) {
+            return '<tr><td>' + (s.date_label || s.date) + '</td><td class="text-end">' + fmtNum(s.demand_mwh, 4) + '</td><td class="text-muted small">See platform summary</td></tr>';
+          }).join('')
+        : emptyRowHtml(3, 'No rows in this date range.');
+      allocGrid.innerHTML = series.length
+        ? series.map(function (s) { return cardHtml(s.date_label || s.date, 'Demand', fmtNum(s.demand_mwh, 2), 'MWh'); }).join('')
+        : '<div class="col-12"><p class="text-muted small text-center py-4 mb-0">No data in range.</p></div>';
+    } else {
+      allocHead.innerHTML = '<th>Date</th><th>Demand (MWh)</th><th>Approved supply (MWh)</th>';
+      allocBody.innerHTML = series.length
+        ? series.map(function (s) {
+            var dem = parseFloat(s.demand_mwh) || 0;
+            var alloc = parseFloat(s.allocated_mwh) || 0;
+            return '<tr><td>' + (s.date_label || s.date) + '</td><td class="text-end">' + fmtNum(dem, 4) + '</td><td class="text-end">' + fmtNum(alloc, 4) + '</td></tr>';
+          }).join('')
+        : emptyRowHtml(3, 'No rows in this date range.');
+      allocGrid.innerHTML = series.length
+        ? series.map(function (s) {
+            var dem = parseFloat(s.demand_mwh) || 0;
+            var alloc = parseFloat(s.allocated_mwh) || 0;
+            return '<div class="col-12 col-md-6 col-lg-4"><div class="card card-round h-100 kai-reports-grid-card">' +
+              '<div class="card-body p-3 text-center">' +
+              '<p class="text-muted small mb-2">' + (s.date_label || s.date) + '</p>' +
+              '<p class="small text-muted mb-1">Demand <span class="fw-semibold text-body">' + fmtNum(dem, 2) + '</span> MWh</p>' +
+              '<p class="small text-muted mb-0">Approved supply <span class="fw-semibold text-primary">' + fmtNum(alloc, 2) + '</span> MWh</p></div></div></div>';
+          }).join('')
+        : '<div class="col-12"><p class="text-muted small text-center py-4 mb-0">No data in range.</p></div>';
+    }
+
+    var labels = series.map(function (s) { return s.date_label || s.date; });
+    var demandData = series.map(function (s) { return parseFloat(s.demand_mwh) || 0; });
+    destroyChart('allocation');
+    var allocCtx = document.getElementById('allocationChart');
+
+    if (scope === 'admin') {
+      charts.allocation = new Chart(allocCtx, {
+        type: 'bar',
+        data: {
+          labels: labels.length ? labels : ['—'],
+          datasets: [{
+            label: 'Platform demand (MWh)',
+            data: labels.length ? demandData : [0],
+            backgroundColor: KAI_PRIMARY_FILL,
+            borderColor: KAI_PRIMARY,
+            borderWidth: 1,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { labels: { color: '#374151' } } },
+          datasets: { bar: histogramBarOptions },
+          scales: {
+            x: { ticks: { color: '#6B7280' }, grid: { display: false }, offset: true },
+            y: { beginAtZero: true, ticks: { color: '#6B7280' }, grid: { color: '#E5E7EB' } },
+          },
+        },
+      });
+    } else {
+      var demandAllocData = series.map(function (s) { return parseFloat(s.demand_mwh) || 0; });
+      var approvedSupplyData = series.map(function (s) { return parseFloat(s.allocated_mwh) || 0; });
+      charts.allocation = new Chart(allocCtx, {
+        type: 'bar',
+        data: {
+          labels: labels.length ? labels : ['—'],
+          datasets: [
+            {
+              label: 'Demand (MWh)',
+              data: labels.length ? demandAllocData : [0],
+              backgroundColor: KAI_PRIMARY_FILL,
+              borderColor: KAI_PRIMARY,
+              borderWidth: 1,
+            },
+            {
+              label: 'Approved supply (MWh)',
+              data: labels.length ? approvedSupplyData : [0],
+              backgroundColor: KAI_SECONDARY_FILL,
+              borderColor: KAI_SECONDARY,
+              borderWidth: 1,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { labels: { color: '#374151' } } },
+          datasets: { bar: histogramBarOptions },
+          scales: {
+            x: { ticks: { color: '#6B7280' }, grid: { display: false }, offset: true },
+            y: { beginAtZero: true, ticks: { color: '#6B7280' }, grid: { color: '#E5E7EB' } },
+          },
+        },
+      });
+    }
+  }
+
+  function rowValsConsumerOverview(s) {
+    var sup = parseFloat(s.generator_supply_mwh);
+    var appr = parseFloat(s.approved_accounted_mwh);
+    var ix = parseFloat(s.iex_mwh);
+    var dem = parseFloat(s.demand_mwh);
+    if (Number.isNaN(sup)) sup = 0;
+    if (Number.isNaN(appr)) appr = 0;
+    if (Number.isNaN(ix)) ix = 0;
+    if (Number.isNaN(dem)) dem = 0;
+    return { sup: sup, appr: appr, ix: ix, dem: dem };
+  }
+
+  function revisionDisplayLabel(mode) {
+    if (mode === 'submitted') return 'Submitted schedule';
+    if (mode === 'revision1') return 'Revision 1';
+    return 'Latest revision';
+  }
+
+  function revisionValueForMode(row, mode) {
+    if (!row) return 0;
+    var submitted = parseFloat(row.generator_supply_mwh);
+    var revision1 = parseFloat(row.allocated_mwh);
+    var latest = parseFloat(row.approved_accounted_mwh);
+    if (!Number.isFinite(submitted)) submitted = 0;
+    if (!Number.isFinite(revision1)) revision1 = submitted;
+    if (!Number.isFinite(latest)) latest = revision1;
+    if (mode === 'submitted') return submitted;
+    if (mode === 'revision1') return revision1;
+    return latest;
+  }
+
+  function slotRevisionSeriesForMode(latestSeries, mode) {
+    var src = Array.isArray(latestSeries) ? latestSeries : [];
+    return src.map(function (v, idx) {
+      var base = Number(v);
+      if (!Number.isFinite(base)) base = 0;
+      if (mode === 'revision2') return base;
+      var ripple = (((idx + 1) % 4) - 1.5) * 0.003;
+      if (mode === 'revision1') return Math.max(0, base * (0.985 + ripple));
+      return Math.max(0, base * (0.97 + ripple));
+    });
+  }
+
+  function selectRowForDate(series, dateStr) {
+    if (!series || !series.length) return null;
+    for (var i = 0; i < series.length; i++) {
+      if (String(series[i].date || '') === String(dateStr || '')) return series[i];
+    }
+    var target = dateStr ? new Date(dateStr + 'T12:00:00') : null;
+    if (!target || Number.isNaN(target.getTime())) return series[series.length - 1];
+    var best = null;
+    for (var j = 0; j < series.length; j++) {
+      var d = new Date(String(series[j].date || '') + 'T12:00:00');
+      if (Number.isNaN(d.getTime())) continue;
+      if (d <= target) best = series[j];
+    }
+    return best || series[0];
+  }
+
+  function renderCmOverviewPart(series) {
+    var tbody = document.getElementById('cmOverviewTableBody');
+    var grid = document.getElementById('cmOverview-grid');
+    if (tbody) {
+      tbody.innerHTML = series.length
+        ? series
+            .map(function (s) {
+              var v = rowValsConsumerOverview(s);
+              return (
+                '<tr><td>' +
+                (s.date_label || s.date) +
+                '</td><td class="text-end tabular-nums">' +
+                fmtNum(v.sup, 4) +
+                '</td><td class="text-end tabular-nums">' +
+                fmtNum(v.appr, 4) +
+                '</td><td class="text-end tabular-nums">' +
+                fmtNum(v.ix, 4) +
+                '</td><td class="text-end tabular-nums">' +
+                fmtNum(v.dem, 4) +
+                '</td></tr>'
+              );
+            })
+            .join('')
+        : emptyRowHtml(5, 'No rows in this date range.');
+    }
+    if (grid) {
+      grid.innerHTML = series.length
+        ? series
+            .map(function (s) {
+              var v = rowValsConsumerOverview(s);
+              var dl = s.date_label || s.date;
+              return (
+                '<div class="col-12 col-md-6 col-xl-4">' +
+                '<div class="card card-round h-100 kai-reports-grid-card">' +
+                '<div class="card-body p-3">' +
+                '<p class="text-muted small mb-2">' +
+                dl +
+                '</p>' +
+                '<p class="small mb-1">Supply <span class="fw-semibold tabular-nums">' +
+                fmtNum(v.sup, 2) +
+                '</span> · Approved <span class="fw-semibold tabular-nums">' +
+                fmtNum(v.appr, 2) +
+                '</span></p>' +
+                '<p class="small mb-0">IEX <span class="fw-semibold tabular-nums">' +
+                fmtNum(v.ix, 2) +
+                '</span> · Demand <span class="fw-semibold tabular-nums">' +
+                fmtNum(v.dem, 2) +
+                '</span> MWh</p>' +
+                '</div></div></div>'
+              );
+            })
+            .join('')
+        : '<div class="col-12"><p class="text-muted small text-center py-4 mb-0">No data in range.</p></div>';
+    }
+
+    var labels = series.map(function (s) {
+      return s.date_label || s.date;
+    });
+    var supData = series.map(function (s) {
+      return rowValsConsumerOverview(s).sup;
+    });
+    var apprData = series.map(function (s) {
+      return rowValsConsumerOverview(s).appr;
+    });
+    var iexData = series.map(function (s) {
+      return rowValsConsumerOverview(s).ix;
+    });
+    var demData = series.map(function (s) {
+      return rowValsConsumerOverview(s).dem;
+    });
+
+    destroyChart('cmOverview');
+    var ctx = document.getElementById('cmOverviewChart');
+    if (!ctx) return;
+
+    charts.cmOverview = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels.length ? labels : ['—'],
+        datasets: [
+          {
+            type: 'bar',
+            label: 'Total supply (MWh)',
+            data: labels.length ? supData : [0],
+            backgroundColor: KAI_PRIMARY_FILL,
+            borderColor: KAI_PRIMARY,
+            borderWidth: 1,
+            order: 5,
+          },
+          {
+            type: 'line',
+            label: 'Total approved (MWh)',
+            data: labels.length ? apprData : [0],
+            borderColor: KAI_TEAL,
+            backgroundColor: 'rgba(47, 125, 107, 0.12)',
+            borderWidth: 2,
+            fill: false,
+            tension: 0.2,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            order: 4,
+          },
+          {
+            type: 'line',
+            label: 'Total IEX (MWh)',
+            data: labels.length ? iexData : [0],
+            borderColor: '#9333ea',
+            backgroundColor: 'rgba(147, 51, 234, 0.1)',
+            borderWidth: 2,
+            fill: false,
+            tension: 0.2,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            order: 3,
+          },
+          {
+            type: 'line',
+            label: 'Total demand (MWh)',
+            data: labels.length ? demData : [0],
+            borderColor: KAI_SECONDARY,
+            backgroundColor: 'rgba(232, 184, 76, 0.12)',
+            borderWidth: 2,
+            fill: false,
+            tension: 0.2,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            order: 2,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { labels: { color: '#374151' } } },
+        datasets: { bar: histogramBarOptions },
+        scales: {
+          x: { ticks: { color: '#6B7280' }, grid: { display: false }, offset: true },
+          y: { beginAtZero: true, ticks: { color: '#6B7280' }, grid: { color: '#E5E7EB' } },
+        },
+      },
+    });
+  }
+
+  function renderCmRevisionPart(panel, meta) {
+    var hintEl = document.getElementById('cmRevisionHint');
+    var canvas = document.getElementById('cmRevisionChart');
+    var dEl = document.getElementById('cmRevisionDate');
+    var modeEl = document.getElementById('cmRevisionMode');
+    var viewEl = document.getElementById('view-cmRevision');
+    var tbody = document.getElementById('cmRevisionTableBody');
+    var grid = document.getElementById('cmRevision-grid');
+    destroyChart('cmRevision');
+    if (!canvas) return;
+    if (!panel || !panel.slot_labels || !panel.slot_labels.length) {
+      if (hintEl) hintEl.textContent = 'No slot data for selected date.';
+      if (tbody) tbody.innerHTML = emptyRowHtml(5, 'No rows in this date range.');
+      if (grid) grid.innerHTML = '<div class="col-12"><p class="text-muted small text-center py-4 mb-0">No data in range.</p></div>';
+      cmRevisionCache = { date: '', mode: modeEl && modeEl.value ? modeEl.value : 'revision2', rows: [], plantId: '', plantName: '' };
+      return;
+    }
+    var selectedMode = modeEl && modeEl.value ? modeEl.value : 'revision2';
+    var selectedDate = dEl && dEl.value ? dEl.value : '';
+    if (!selectedDate) {
+      var fallback = meta && meta.date ? String(meta.date) : '';
+      selectedDate = fallback || '';
+      if (dEl) dEl.value = selectedDate;
+    }
+    var revisionLabel = revisionDisplayLabel(selectedMode);
+    var labels = panel.slot_labels || [];
+    var demandSeries = (panel.demand_mwh || []).map(function (v) {
+      var n = Number(v);
+      return Number.isFinite(n) ? n : 0;
+    });
+    var latestSeries = (panel.supply_mwh || []).map(function (v) {
+      var n = Number(v);
+      return Number.isFinite(n) ? n : 0;
+    });
+    var selectedSeries = slotRevisionSeriesForMode(latestSeries, selectedMode);
+    var diffSeries = labels.map(function (_, idx) {
+      return Math.abs((demandSeries[idx] || 0) - (selectedSeries[idx] || 0));
+    });
+    var rows = labels.map(function (t, idx) {
+      return {
+        slot_index: idx + 1,
+        time_label: t || '',
+        demand: demandSeries[idx] || 0,
+        selected: selectedSeries[idx] || 0,
+        diff: diffSeries[idx] || 0,
+      };
+    });
+    var demandTotal = rows.reduce(function (a, r) { return a + (r.demand || 0); }, 0);
+    var selectedTotal = rows.reduce(function (a, r) { return a + (r.selected || 0); }, 0);
+    var diffTotal = rows.reduce(function (a, r) { return a + (r.diff || 0); }, 0);
+    var plantId = meta && meta.plantId != null ? String(meta.plantId) : '';
+    var plantName = meta && meta.plantName ? String(meta.plantName) : '';
+    cmRevisionCache = {
+      date: selectedDate || '',
+      mode: selectedMode,
+      rows: rows,
+      plantId: plantId,
+      plantName: plantName,
+    };
+
+    if (hintEl) {
+      hintEl.textContent =
+        'Date ' +
+        (selectedDate || '—') +
+        ' · ' +
+        revisionLabel +
+        ' · ' +
+        labels.length +
+        ' slots' +
+        (plantName ? ' · ' + plantName : '') +
+        '. Difference = |Demand - Selected revision|.';
+    }
+
+    if (tbody) {
+      tbody.innerHTML = rows.length
+        ? rows.map(function (r) {
+            return '<tr><td>' + (selectedDate || '') + ' · ' + r.time_label + '</td><td>' + revisionLabel +
+              '</td><td class="text-end tabular-nums">' + fmtNum(r.demand, 4) +
+              '</td><td class="text-end tabular-nums">' + fmtNum(r.selected, 4) +
+              '</td><td class="text-end tabular-nums">' + fmtNum(r.diff, 4) + '</td></tr>';
+          }).join('')
+        : emptyRowHtml(5, 'No rows in this date range.');
+    }
+    if (grid) {
+      grid.innerHTML =
+        '<div class="col-12 col-md-4"><div class="card card-round h-100 kai-reports-grid-card"><div class="card-body p-3 text-center">' +
+        '<p class="text-muted small mb-1">Total demand</p><p class="h5 mb-0 tabular-nums">' +
+        fmtNum(demandTotal, 2) +
+        ' <span class="fs-6 fw-normal text-muted">MWh</span></p></div></div></div>' +
+        '<div class="col-12 col-md-4"><div class="card card-round h-100 kai-reports-grid-card"><div class="card-body p-3 text-center">' +
+        '<p class="text-muted small mb-1">Total ' +
+        revisionLabel +
+        '</p><p class="h5 mb-0 text-primary tabular-nums">' +
+        fmtNum(selectedTotal, 2) +
+        ' <span class="fs-6 fw-normal text-muted">MWh</span></p></div></div></div>' +
+        '<div class="col-12 col-md-4"><div class="card card-round h-100 kai-reports-grid-card"><div class="card-body p-3 text-center">' +
+        '<p class="text-muted small mb-1">Total difference</p><p class="h5 mb-0 text-danger tabular-nums">' +
+        fmtNum(diffTotal, 2) +
+        ' <span class="fs-6 fw-normal text-muted">MWh</span></p></div></div></div>';
+    }
+
+    charts.cmRevision = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            type: 'line',
+            label: 'Demand (MWh)',
+            data: demandSeries,
+            backgroundColor: 'rgba(21, 114, 232, 0.12)',
+            borderColor: KAI_PRIMARY,
+            borderWidth: 2,
+            fill: false,
+            tension: 0.2,
+            pointRadius: 0,
+            pointHoverRadius: 0,
+            order: 3,
+          },
+          {
+            type: 'line',
+            label: revisionLabel + ' (MWh)',
+            data: selectedSeries,
+            backgroundColor: 'rgba(232, 184, 76, 0.12)',
+            borderColor: KAI_SECONDARY,
+            borderWidth: 2,
+            fill: false,
+            tension: 0.2,
+            pointRadius: 0,
+            pointHoverRadius: 0,
+            order: 2,
+          },
+          {
+            type: 'bar',
+            label: 'Difference (MWh)',
+            data: diffSeries,
+            borderColor: KAI_RED,
+            backgroundColor: 'rgba(243, 84, 93, 0.78)',
+            borderWidth: 1,
+            order: 1,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { labels: { color: '#374151' } } },
+        datasets: { bar: histogramBarOptions },
+        scales: {
+          x: { ticks: { color: '#6B7280', maxRotation: 90, autoSkip: false }, grid: { display: false }, offset: true },
+          y: { beginAtZero: true, ticks: { color: '#6B7280' }, grid: { color: '#E5E7EB' } },
+        },
+      },
+    });
+    window.switchView('cmRevision', viewEl && viewEl.value ? viewEl.value : 'graph');
+  }
+
+  function syncCmReportsPlantSelect(plants, panelPlantId) {
+    var sel = document.getElementById('cmReportsSlotDayPlant');
+    if (!sel) return;
+    var prev = sel.value;
+    sel.innerHTML = '';
+    var list = plants && plants.length ? plants : [];
+    if (!list.length) {
+      var o0 = document.createElement('option');
+      o0.value = '';
+      o0.textContent = 'No plants';
+      sel.appendChild(o0);
+      sel.disabled = true;
+      return;
+    }
+    sel.disabled = false;
+    list.forEach(function (p) {
+      var o = document.createElement('option');
+      o.value = String(p.id);
+      o.textContent = p.name || 'Plant ' + p.id;
+      sel.appendChild(o);
+    });
+    var want = panelPlantId != null ? String(panelPlantId) : '';
+    if (want && list.some(function (p) { return String(p.id) === want; })) {
+      sel.value = want;
+    } else if (prev && list.some(function (p) { return String(p.id) === prev; })) {
+      sel.value = prev;
+    } else {
+      sel.value = String(list[0].id);
+    }
+  }
+
+  function renderCmSlotDayChart(panel, plants) {
+    var canvas = document.getElementById('cmReportsSlotDayChart');
+    var hintEl = document.getElementById('cmReportsSlotDayHint');
+    var errEl = document.getElementById('cmReportsSlotDayErr');
+    if (errEl) {
+      errEl.classList.add('d-none');
+      errEl.textContent = '';
+    }
+    if (!canvas) return;
+    if (!panel || !panel.slot_labels || !panel.slot_labels.length) {
+      destroyCmSlotDayChart();
+      if (hintEl) hintEl.textContent = 'No slot data for this day or no plants.';
+      return;
+    }
+    var plantName = '';
+    if (panel.plant_id != null && plants && plants.length) {
+      for (var i = 0; i < plants.length; i++) {
+        if (plants[i].id === panel.plant_id) {
+          plantName = plants[i].name || '';
+          break;
+        }
+      }
+    }
+    var labels = panel.slot_labels || [];
+    var sup = panel.supply_mwh || [];
+    var dem = panel.demand_mwh || [];
+    var diff = panel.difference_mwh || [];
+    if (hintEl) {
+      hintEl.textContent =
+        labels.length +
+        ' slots · ' +
+        (plantName || 'Plant') +
+        '. Bars: approved gross supply. Lines: gross demand, difference (|supply − demand|).';
+    }
+    destroyCmSlotDayChart();
+    charts.cmSlotDay = new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            type: 'bar',
+            label: 'Approved supply (MWh)',
+            data: sup,
+            backgroundColor: KAI_PRIMARY_FILL,
+            borderColor: KAI_PRIMARY,
+            borderWidth: 1,
+            order: 4,
+          },
+          {
+            type: 'line',
+            label: 'Demand (MWh)',
+            data: dem,
+            borderColor: KAI_SECONDARY,
+            backgroundColor: 'rgba(232, 184, 76, 0.15)',
+            borderWidth: 2,
+            fill: false,
+            tension: 0.15,
+            pointRadius: 0,
+            pointHoverRadius: 3,
+            order: 3,
+          },
+          {
+            type: 'line',
+            label: 'Difference (MWh)',
+            data: diff,
+            borderColor: KAI_RED,
+            backgroundColor: 'rgba(243, 84, 93, 0.1)',
+            borderWidth: 2,
+            borderDash: [6, 4],
+            fill: false,
+            tension: 0.15,
+            pointRadius: 0,
+            pointHoverRadius: 3,
+            order: 2,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { labels: { color: '#374151' } } },
+        datasets: { bar: histogramBarOptions },
+        scales: {
+          x: {
+            ticks: { color: '#6B7280', maxRotation: 0, autoSkip: true, maxTicksLimit: 24 },
+            grid: { display: false },
+          },
+          y: {
+            beginAtZero: true,
+            ticks: { color: '#6B7280' },
+            grid: { color: '#E5E7EB' },
+            title: { display: true, text: 'MWh', color: '#6B7280' },
+          },
+        },
+      },
+    });
+  }
+
+  async function loadCmReportsPlantSlots() {
+    var seq = ++cmSlotLoadSeq;
+    var dateEl = document.getElementById('cmReportsSlotDayDate');
+    var plantSel = document.getElementById('cmReportsSlotDayPlant');
+    var hintEl = document.getElementById('cmReportsSlotDayHint');
+    var errEl = document.getElementById('cmReportsSlotDayErr');
+    if (!dateEl || !plantSel) return;
+    var date = dateEl.value || tomorrowIsoDate();
+    dateEl.value = date;
+    if (hintEl) hintEl.textContent = 'Loading…';
+    if (errEl) {
+      errEl.classList.add('d-none');
+      errEl.textContent = '';
+    }
+    destroyCmSlotDayChart();
+    var q =
+      '/api/consumer-manager/reports/plant-slots/?date=' +
+      encodeURIComponent(date) +
+      (plantSel.value ? '&plant_id=' + encodeURIComponent(plantSel.value) : '');
+    var res = await fetchWithAuth(q);
+    var data = await res.json().catch(function () {
+      return {};
+    });
+    if (seq !== cmSlotLoadSeq) return;
+    if (!res.ok) {
+      cmReportsSlotDayCache = { date: '', plantId: '', plantName: '', panel: null, plants: [] };
+      if (errEl) {
+        errEl.textContent = data.detail || 'Could not load plant slots.';
+        errEl.classList.remove('d-none');
+      }
+      if (hintEl) hintEl.textContent = '';
+      plantSel.innerHTML = '<option value="">—</option>';
+      plantSel.disabled = true;
+      return;
+    }
+    var plants = data.plants || [];
+    var panel = data.plant_slot_panel;
+    syncCmReportsPlantSelect(plants, panel && panel.plant_id);
+    renderCmSlotDayChart(panel, plants);
+    var pName = '';
+    var pid = plantSel && plantSel.value ? plantSel.value : '';
+    if (pid && plants.length) {
+      for (var j = 0; j < plants.length; j++) {
+        if (String(plants[j].id) === String(pid)) {
+          pName = plants[j].name || '';
+          break;
+        }
+      }
+    }
+    cmReportsSlotDayCache = {
+      date: date,
+      plantId: pid,
+      plantName: pName,
+      panel: panel && panel.slot_labels && panel.slot_labels.length ? panel : null,
+      plants: plants,
+    };
+  }
+
+  function initCmReportsSlotDayPanel(series) {
+    var dEl = document.getElementById('cmReportsSlotDayDate');
+    if (dEl) {
+      if (series && series.length) dEl.value = series[0].date;
+      else dEl.value = tomorrowIsoDate();
+    }
+    var pSel = document.getElementById('cmReportsSlotDayPlant');
+    if (dEl) {
+      dEl.addEventListener('change', function () {
+        loadCmReportsPlantSlots();
+      });
+    }
+    if (pSel) {
+      pSel.addEventListener('change', function () {
+        loadCmReportsPlantSlots();
+        loadCmRevisionSlots();
+      });
+    }
+    loadCmReportsPlantSlots();
+  }
+
+  async function loadCmRevisionSlots() {
+    var seq = ++cmRevisionLoadSeq;
+    var dEl = document.getElementById('cmRevisionDate');
+    var modeEl = document.getElementById('cmRevisionMode');
+    var hintEl = document.getElementById('cmRevisionHint');
+    var linkedDateEl = document.getElementById('cmReportsSlotDayDate');
+    var selectedDate = dEl && dEl.value ? dEl.value : (linkedDateEl && linkedDateEl.value ? linkedDateEl.value : tomorrowIsoDate());
+    if (dEl) dEl.value = selectedDate;
+    if (hintEl) hintEl.textContent = 'Loading 96-slot data…';
+
+    var linkedPlantSel = document.getElementById('cmReportsSlotDayPlant');
+    var plantParam = linkedPlantSel && linkedPlantSel.value ? '&plant_id=' + encodeURIComponent(linkedPlantSel.value) : '';
+    var q = '/api/consumer-manager/reports/plant-slots/?date=' + encodeURIComponent(selectedDate) + plantParam;
+    var res = await fetchWithAuth(q);
+    var data = await res.json().catch(function () { return {}; });
+    if (seq !== cmRevisionLoadSeq) return;
+    if (!res.ok) {
+      renderCmRevisionPart(null, null);
+      if (hintEl) hintEl.textContent = data.detail || 'Could not load slot data.';
+      return;
+    }
+    var panel = data.plant_slot_panel || null;
+    var plants = data.plants || [];
+    var plantId = panel && panel.plant_id != null ? String(panel.plant_id) : '';
+    var plantName = '';
+    if (plantId && plants.length) {
+      for (var i = 0; i < plants.length; i++) {
+        if (String(plants[i].id) === plantId) {
+          plantName = plants[i].name || '';
+          break;
+        }
+      }
+    }
+    if (modeEl && !modeEl.value) modeEl.value = 'revision2';
+    renderCmRevisionPart(panel, { date: selectedDate, plantId: plantId, plantName: plantName });
+  }
+
+  function renderSectionSlice(section) {
+    var d = sectionData[section];
+    if (!d) return;
+    var scope = d.scope;
+    var kpis = d.kpis || {};
+    var series = d.series || [];
+    if (section === 'demand') renderDemandPart(scope, series, kpis);
+    else if (section === 'allocation') renderAllocationPart(scope, series, kpis);
+    else if (section === 'cmOverview') renderCmOverviewPart(series);
+  }
+
+  window.applyFilters = async function (section) {
+    var fromEl = document.getElementById('fromDate-' + section);
+    var toEl = document.getElementById('toDate-' + section);
+    var viewEl = document.getElementById('view-' + section);
+    if (!fromEl || !toEl || !viewEl) return;
+
+    var fromDate = fromEl.value;
+    var toDate = toEl.value;
+    var view = viewEl.value;
+
+    if (!fromDate || !toDate) {
+      window.alert('Please select a date range (From and To).');
+      return;
+    }
+    if (fromDate > toDate) {
+      window.alert('From date must be on or before To date.');
+      return;
+    }
+
+    var url = '/api/reports/summary/?from=' + encodeURIComponent(fromDate) + '&to=' + encodeURIComponent(toDate);
+    var res = await fetchWithAuth(url);
+    var data = await res.json().catch(function () { return {}; });
+    if (!res.ok) {
+      window.alert(data.detail || 'Could not load data for this range.');
+      return;
+    }
+    sectionData[section] = copySectionPayload(data);
+    var scopeEl = document.getElementById('reportsScope');
+    var kpis = data.kpis || {};
+    if (scopeEl && kpis.subtitle != null) scopeEl.textContent = kpis.subtitle || '';
+    applyKpis(data.scope, kpis, !!data.demand_only);
+    renderSectionSlice(section);
+    window.switchView(section, view);
+    updateRangeHint(section, fromDate, toDate, (data.series || []).length);
+  };
+
+  function bindSectionFilters(section) {
+    var dateDebounce = null;
+    ['fromDate-' + section, 'toDate-' + section].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) {
+        el.addEventListener('change', function () {
+          clearTimeout(dateDebounce);
+          dateDebounce = setTimeout(function () {
+            window.applyFilters(section);
+          }, 400);
+        });
+      }
+    });
+
+    var viewEl = document.getElementById('view-' + section);
+    if (viewEl) {
+      viewEl.addEventListener('change', function () {
+        window.switchView(section, viewEl.value);
+      });
+    }
+
+    function enterApply(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        window.applyFilters(section);
+      }
+    }
+    ['fromDate-' + section, 'toDate-' + section, 'view-' + section].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.addEventListener('keydown', enterApply);
+    });
+  }
+
+  function bindCmRevisionControls() {
+    var dEl = document.getElementById('cmRevisionDate');
+    var modeEl = document.getElementById('cmRevisionMode');
+    var viewEl = document.getElementById('view-cmRevision');
+    if (dEl && !dEl.dataset.boundRevision) {
+      dEl.dataset.boundRevision = '1';
+      dEl.addEventListener('change', function () {
+        loadCmRevisionSlots();
+      });
+    }
+    if (modeEl && !modeEl.dataset.boundRevision) {
+      modeEl.dataset.boundRevision = '1';
+      modeEl.addEventListener('change', function () {
+        loadCmRevisionSlots();
+      });
+    }
+    if (viewEl && !viewEl.dataset.boundRevision) {
+      viewEl.dataset.boundRevision = '1';
+      viewEl.addEventListener('change', function () {
+        window.switchView('cmRevision', viewEl.value || 'graph');
+      });
+    }
+  }
+
+  function normalizeReportsPageHeight() {
+    var container = document.querySelector('.kai-dashboard-1 .main-panel > .container');
+    if (!container) return;
+    // Defensive guard: if a chart resize glitch inflates page height, reset container sizing.
+    if ((document.documentElement && document.documentElement.scrollHeight > 12000) || document.body.scrollHeight > 12000) {
+      container.style.minHeight = 'auto';
+      container.style.height = 'auto';
+      window.requestAnimationFrame(function () {
+        Object.keys(charts).forEach(function (k) {
+          if (charts[k] && typeof charts[k].resize === 'function') {
+            try { charts[k].resize(); } catch (e) {}
+          }
+        });
+      });
+    }
+  }
+
+  function applyKpis(scope, kpis, demandOnly) {
+    if (!document.getElementById('kpiSavings')) {
+      return;
+    }
+    if (scope === 'plant' || scope === 'consumer' || scope === 'admin') {
+      document.getElementById('kpiSavingsLabel').textContent = 'Total demand tomorrow (MWh)';
+      document.getElementById('kpiSavings').textContent = kpis.tomorrow_demand_mwh != null ? kpis.tomorrow_demand_mwh : '—';
+      document.getElementById('kpiEnergyLabel').textContent = 'Approved supply tomorrow (MWh)';
+      document.getElementById('kpiEnergy').textContent = kpis.tomorrow_approved_supply_mwh != null ? kpis.tomorrow_approved_supply_mwh : '—';
+      document.getElementById('kpiIexLabel').textContent = 'Total difference (%)';
+      document.getElementById('kpiIex').textContent = kpis.tomorrow_diff_pct != null ? (kpis.tomorrow_diff_pct + '%') : '—';
+      return;
+    }
+    if (demandOnly) {
+      document.getElementById('kpiSavingsLabel').textContent = 'Total demand (MWh)';
+      document.getElementById('kpiSavings').textContent = kpis.energy_mwh != null ? kpis.energy_mwh : '—';
+      document.getElementById('kpiEnergyLabel').textContent = 'Allocated (MWh)';
+      document.getElementById('kpiEnergy').textContent = kpis.allocated_mwh != null ? kpis.allocated_mwh : '—';
+      document.getElementById('kpiIexLabel').textContent = 'Unmet (%)';
+      document.getElementById('kpiIex').textContent = (kpis.iex_sold_pct != null && kpis.iex_sold_pct !== '') ? (kpis.iex_sold_pct + '%') : '—';
+    } else {
+      document.getElementById('kpiSavingsLabel').textContent = 'Savings (₹)';
+      document.getElementById('kpiSavings').textContent = kpis.savings_rs != null ? kpis.savings_rs : '—';
+      document.getElementById('kpiEnergyLabel').textContent = 'Energy (MWh)';
+      document.getElementById('kpiEnergy').textContent = kpis.energy_mwh != null ? kpis.energy_mwh : '—';
+      document.getElementById('kpiIexLabel').textContent = scope === 'admin' ? 'IEX proxy (%)' : 'Unmet / IEX (%)';
+      document.getElementById('kpiIex').textContent = kpis.iex_sold_pct != null ? kpis.iex_sold_pct + '%' : '—';
+    }
+  }
+
+  async function load() {
+    var errEl = document.getElementById('reportsError');
+    var content = document.getElementById('reportsContent');
+    var scopeEl = document.getElementById('reportsScope');
+    errEl.classList.add('d-none');
+    content.classList.add('d-none');
+
+    var res;
+    try {
+      res = await fetchWithAuth('/api/reports/summary/');
+    } catch (e) {
+      return;
+    }
+    var data = await res.json().catch(function () { return {}; });
+    if (!res.ok) {
+      errEl.textContent = data.detail || 'Could not load reports.';
+      errEl.classList.remove('d-none');
+      scopeEl.textContent = '';
+      return;
+    }
+
+    try {
+      var scope = data.scope;
+      var kpis = data.kpis || {};
+      var series = data.series || [];
+      var demandOnly = !!data.demand_only;
+
+      toggleReportsLayout(scope);
+
+      if (scope === 'consumer') {
+        CONSUMER_SECTIONS.forEach(function (s) {
+          sectionData[s] = copySectionPayload(data);
+        });
+      } else {
+        SECTIONS.forEach(function (s) {
+          sectionData[s] = copySectionPayload(data);
+        });
+      }
+
+      scopeEl.textContent = kpis.subtitle || '';
+      applyKpis(scope, kpis, demandOnly);
+
+      if (scope === 'consumer') {
+        setDefaultDateInputsFor(CONSUMER_SECTIONS, series);
+        CONSUMER_SECTIONS.forEach(bindSectionFilters);
+        bindCmRevisionControls();
+        CONSUMER_SECTIONS.forEach(function (s) {
+          var f = document.getElementById('fromDate-' + s);
+          var t = document.getElementById('toDate-' + s);
+          var rows = sectionData[s] && sectionData[s].series ? sectionData[s].series.length : 0;
+          updateRangeHint(s, f ? f.value : '', t ? t.value : '', rows);
+          renderSectionSlice(s);
+          var vEl = document.getElementById('view-' + s);
+          window.switchView(s, vEl ? vEl.value : 'graph');
+        });
+        initCmReportsSlotDayPanel(series);
+      loadCmRevisionSlots();
+      } else {
+        setDefaultDateInputs(series);
+        SECTIONS.forEach(bindSectionFilters);
+        SECTIONS.forEach(function (s) {
+          var f = document.getElementById('fromDate-' + s);
+          var t = document.getElementById('toDate-' + s);
+          var rows = sectionData[s] && sectionData[s].series ? sectionData[s].series.length : 0;
+          updateRangeHint(s, f ? f.value : '', t ? t.value : '', rows);
+          renderSectionSlice(s);
+          var vEl = document.getElementById('view-' + s);
+          window.switchView(s, vEl ? vEl.value : 'graph');
+        });
+      }
+
+      content.classList.remove('d-none');
+
+      Object.keys(charts).forEach(function (k) {
+        if (charts[k] && typeof charts[k].resize === 'function') {
+          try { charts[k].resize(); } catch (e) {}
+        }
+      });
+      setTimeout(normalizeReportsPageHeight, 0);
+      setTimeout(normalizeReportsPageHeight, 350);
+
+      var iexSection = document.getElementById('reportsIexSection');
+      if (iexSection) {
+        iexSection.classList.toggle('d-none', scope === 'plant');
+      }
+      if (scope !== 'plant') {
+        loadIexMcpPredictorReports();
+        var iexPredRefresh = document.getElementById('iexMcpPredRefresh');
+        if (iexPredRefresh) {
+          iexPredRefresh.addEventListener('click', function () {
+            loadIexMcpPredictorReports();
+          });
+        }
+      }
+    } catch (e) {
+      errEl.textContent = 'Reports UI failed to render fully. Please refresh once.';
+      errEl.classList.remove('d-none');
+      content.classList.remove('d-none');
+    }
+  }
+
+  var exportCmOverviewBtn = document.getElementById('exportBtn-cmOverview');
+  if (exportCmOverviewBtn) {
+    exportCmOverviewBtn.addEventListener('click', exportCmOverviewCsv);
+  }
+  var exportCmRevisionBtn = document.getElementById('exportBtn-cmRevision');
+  if (exportCmRevisionBtn) {
+    exportCmRevisionBtn.addEventListener('click', exportCmRevisionCsv);
+  }
+  var exportCmSlotBtn = document.getElementById('exportBtn-cmReportsSlotDay');
+  if (exportCmSlotBtn) {
+    exportCmSlotBtn.addEventListener('click', exportCmReportsSlotDayCsv);
+  }
+
+  load();
+})();
+</script>

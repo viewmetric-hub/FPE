@@ -1,0 +1,27 @@
+{% extends "dashboard/consumer_manager_base_kaiadmin.html" %}
+{% load static %}
+
+{% block title %}Reports — ViewMetric{% endblock %}
+
+{% block extra_head %}
+{% include "dashboard/reports_shared_head.html" %}
+{% endblock %}
+
+{% block content %}
+{% include "dashboard/reports_shared_body.html" %}
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+  try {
+    var t = localStorage.getItem('accessToken');
+    if (!t) return;
+    var payload = JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    var r = String(payload.role || '').toUpperCase().replace(/\s+/g, '_');
+    if (r === 'PLANT_USER') window.location.replace('{% url "plant_user_reports" %}');
+  } catch (e) {}
+})();
+</script>
+{% include "dashboard/reports_shared_scripts.html" %}
+{% endblock %}

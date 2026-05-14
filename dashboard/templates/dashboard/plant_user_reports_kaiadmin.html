@@ -1,0 +1,1096 @@
+{% extends "dashboard/plant_user_base_kaiadmin.html" %}
+
+{% block title %}Reports — ViewMetric{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  .kai-reports-chart-box { min-height: 280px; position: relative; }
+  .kai-reports-section .card-head-row { align-items: flex-start; }
+  @media (min-width: 768px) {
+    .kai-reports-section .card-head-row { align-items: center; }
+  }
+  .kai-reports-section-card {
+    border: 1px solid rgba(21, 114, 232, 0.18);
+    box-shadow: 0 6px 24px rgba(21, 114, 232, 0.1);
+    overflow: hidden;
+  }
+  .kai-reports-gradient-header {
+    background: linear-gradient(135deg, #1572e8 0%, #1269db 48%, #0d5bbd 100%) !important;
+    border: none !important;
+    padding-top: 1rem !important;
+    padding-bottom: 1rem !important;
+    box-shadow: 0 3px 12px rgba(21, 114, 232, 0.35);
+  }
+  .kai-reports-gradient-header .card-title {
+    color: #fff !important;
+    font-weight: 700;
+  }
+  .kai-reports-gradient-header .text-muted {
+    color: rgba(255, 255, 255, 0.88) !important;
+  }
+  .kai-reports-control {
+    min-height: calc(1.5em + 0.5rem + 2px);
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    background: rgba(255, 255, 255, 0.96);
+    border-radius: 8px;
+    font-weight: 600;
+    color: #1a1d2e;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  }
+  .kai-reports-control:focus {
+    border-color: #fff;
+    background: #fff;
+    box-shadow: 0 0 0 0.2rem rgba(255, 255, 255, 0.45);
+    outline: none;
+  }
+  .kai-reports-chart-inner {
+    border-radius: 12px;
+    border: 1px solid rgba(21, 114, 232, 0.15);
+    background: #fff;
+    padding: 1rem 1rem 0.5rem;
+    box-shadow: inset 0 1px 0 rgba(21, 114, 232, 0.06);
+  }
+  .kai-edit-slots-wrap.kai-reports-table-wrap {
+    max-height: none;
+    box-shadow: 0 4px 18px rgba(21, 114, 232, 0.08);
+  }
+  .kai-edit-slots-table {
+    margin-bottom: 0;
+    --bs-table-striped-bg: rgba(21, 114, 232, 0.055);
+    --bs-table-hover-bg: rgba(21, 114, 232, 0.12);
+    border-color: transparent;
+  }
+  .kai-edit-slots-table thead th {
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: #fff !important;
+    border: none !important;
+    padding-top: 0.75rem !important;
+    padding-bottom: 0.75rem !important;
+    background: linear-gradient(135deg, #1572e8 0%, #1269db 48%, #0d5bbd 100%) !important;
+    box-shadow: 0 2px 8px rgba(21, 114, 232, 0.25);
+  }
+  .kai-edit-slots-table tbody td {
+    vertical-align: middle;
+    border-color: rgba(21, 114, 232, 0.1);
+  }
+  .kai-reports-grid-card {
+    border: 1px solid rgba(21, 114, 232, 0.18);
+    box-shadow: 0 4px 16px rgba(21, 114, 232, 0.08);
+    overflow: hidden;
+  }
+  .kai-reports-gradient-header .btn-label-primary {
+    background: rgba(255, 255, 255, 0.22);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    color: #fff !important;
+  }
+  .kai-reports-gradient-header .btn-label-primary:hover {
+    background: rgba(255, 255, 255, 0.35);
+    color: #fff !important;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+            <div class="mb-4 pt-2">
+              <div class="page-pretitle">Reports</div>
+              <h3 class="fw-bold mb-2">Plant reports</h3>
+              <p id="reportsScope" class="text-muted mb-0" style="max-width: 42rem">Loading…</p>
+            </div>
+
+            <div id="reportsError" class="alert alert-danger d-none mb-4" role="alert"></div>
+
+            <div id="reportsContent" class="d-none">
+              <div class="card card-round mb-4 kai-reports-section kai-reports-section-card">
+                <div class="card-header kai-reports-gradient-header border-0">
+                  <div class="card-head-row flex-wrap gap-3">
+                    <div>
+                      <div class="card-title mb-0">Allocation section</div>
+                      <small class="text-muted d-block mt-1" style="max-width: 36rem">Your plant only. Daily totals: <strong class="text-white">approved allocation</strong> (bars), <strong class="text-white">demand entry</strong> and <strong class="text-white">difference</strong> (lines). Difference = |allocation − demand| (always shown as a positive MWh gap).</small>
+                    </div>
+                    <div class="card-tools d-flex flex-wrap align-items-center gap-2">
+                      <label class="visually-hidden" for="fromDate-allocation">From date</label>
+                      <input type="date" id="fromDate-allocation" class="form-control form-control-sm kai-reports-control" />
+                      <label class="visually-hidden" for="toDate-allocation">To date</label>
+                      <input type="date" id="toDate-allocation" class="form-control form-control-sm kai-reports-control" />
+                      <label class="visually-hidden" for="view-allocation">View</label>
+                      <select id="view-allocation" class="form-select form-select-sm kai-reports-control" style="width: auto; min-width: 7.5rem">
+                        <option value="graph" selected>Histogram</option>
+                        <option value="table">Table</option>
+                        <option value="grid">Grid</option>
+                      </select>
+                      <button type="button" id="exportBtn-allocation" class="btn btn-label-primary btn-sm" title="Download CSV for selected dates">
+                        <span class="btn-label"><i class="fas fa-file-download"></i></span>
+                        Export
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <p id="rangeHint-allocation" class="text-muted small mb-3" aria-live="polite"></p>
+                  <div class="kai-reports-chart-inner mb-2">
+                    <div id="allocation-graph" class="kai-reports-chart-box">
+                      <canvas id="allocationChart"></canvas>
+                    </div>
+                  </div>
+                  <div id="allocation-table" class="d-none kai-edit-slots-wrap kai-reports-table-wrap table-responsive mt-3">
+                    <table class="table table-striped table-hover table-sm align-middle kai-edit-slots-table mb-0">
+                      <thead>
+                        <tr id="allocationTheadRow"></tr>
+                      </thead>
+                      <tbody id="allocationTableBody"></tbody>
+                    </table>
+                  </div>
+                  <div id="allocation-grid" class="row g-3 d-none mt-1"></div>
+                </div>
+              </div>
+
+              <div class="card card-round mb-4 kai-reports-section kai-reports-section-card">
+                <div class="card-header kai-reports-gradient-header border-0">
+                  <div class="card-head-row flex-wrap gap-3">
+                    <div>
+                      <div class="card-title mb-0">Day view (15-min slots)</div>
+                      <small class="text-muted d-block mt-1" style="max-width: 40rem">
+                        Your plant only. <strong class="text-white">Approved allocation</strong> (bars), <strong class="text-white">demand entry</strong> and <strong class="text-white">difference</strong> (lines; |allocation − demand|, always ≥ 0). Any calendar date with approved allocation — 96 quarter-hour slots.
+                      </small>
+                    </div>
+                    <div class="card-tools d-flex flex-wrap align-items-center gap-2">
+                      <label class="visually-hidden" for="slotDayDate">Day</label>
+                      <input type="date" id="slotDayDate" class="form-control form-control-sm kai-reports-control" />
+                      <span id="plantReportsCmGroup" class="d-none">
+                      <label class="visually-hidden" for="slotDayCmSelect">Energy manager</label>
+                      <select id="slotDayCmSelect" class="form-select form-select-sm kai-reports-control" style="min-width: 13rem" aria-label="Energy manager">
+                        <option value="">Loading…</option>
+                      </select>
+                      </span>
+                      <label class="visually-hidden" for="slotDayPlantSelect">Your plant</label>
+                      <select id="slotDayPlantSelect" class="form-select form-select-sm kai-reports-control" style="min-width: 11rem" aria-label="Your plant" disabled title="Reports are for your plant only">
+                        <option value="">—</option>
+                      </select>
+                      <button type="button" id="exportBtn-slotDay" class="btn btn-label-primary btn-sm" title="Download CSV for this day and your plant">
+                        <span class="btn-label"><i class="fas fa-file-download"></i></span>
+                        Export
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <p id="slotDayHint" class="text-muted small mb-2" aria-live="polite"></p>
+                  <p id="slotDayStatus" class="text-danger small mb-2 d-none" role="alert"></p>
+                  <div class="kai-reports-chart-inner mb-2">
+                    <div id="slotDay-graph" class="kai-reports-chart-box" style="min-height: 320px">
+                      <canvas id="slotDayChart"></canvas>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+  var fetchWithAuth = window.kaiFetchWithAuth;
+  if (!fetchWithAuth) return;
+
+  var plantReportsMeta = null;
+
+  var KAI_PRIMARY = '#1572e8';
+  var KAI_PRIMARY_FILL = 'rgba(21, 114, 232, 0.78)';
+  var KAI_SECONDARY = '#f3545d';
+  var KAI_SECONDARY_FILL = 'rgba(243, 84, 93, 0.75)';
+  var KAI_GOLD = '#E8B84C';
+  var KAI_GOLD_FILL = 'rgba(232, 184, 76, 0.78)';
+
+  var SECTIONS = ['allocation'];
+
+  var histogramBarOptions = {
+    categoryPercentage: 0.98,
+    barPercentage: 0.92,
+    borderRadius: 4,
+    borderSkipped: false,
+  };
+
+  window.switchView = function (section, view) {
+    ['graph', 'table', 'grid'].forEach(function (v) {
+      var el = document.getElementById(section + '-' + v);
+      if (el) el.classList.toggle('d-none', v !== view);
+    });
+  };
+
+  var charts = { allocation: null, slotDay: null };
+  var sectionData = {};
+  var slotDayCache = {
+    date: '',
+    cmId: '',
+    plantId: '',
+    plantName: '',
+    consumerName: '',
+    slots: [],
+    plants: [],
+  };
+
+  function tomorrowIsoDate() {
+    var d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().split('T')[0];
+  }
+
+  function plantMwhFromSlot(slot, plantId) {
+    var pid = parseInt(plantId, 10);
+    if (Number.isNaN(pid)) return 0;
+    var alloc = slot.allocations || [];
+    for (var i = 0; i < alloc.length; i++) {
+      if (parseInt(alloc[i].plant_id, 10) === pid) return parseFloat(alloc[i].mwh) || 0;
+    }
+    return 0;
+  }
+
+  function demandEntryMwhFromSlot(slot, plantId) {
+    var pid = parseInt(plantId, 10);
+    if (Number.isNaN(pid)) return 0;
+    var dem = slot.demand_entry_plants || [];
+    for (var i = 0; i < dem.length; i++) {
+      if (parseInt(dem[i].plant_id, 10) === pid) return parseFloat(dem[i].mwh) || 0;
+    }
+    return parseFloat(slot.demand_entry_total_mwh) || 0;
+  }
+
+  function scheduledMwhForSlot(slot, plantId) {
+    return plantMwhFromSlot(slot, plantId);
+  }
+
+  function differenceMwhFromSlot(slot, allocVal, demandVal) {
+    var signed;
+    if (slot.difference_mwh != null && slot.difference_mwh !== '') {
+      signed = parseFloat(slot.difference_mwh) || 0;
+    } else {
+      var a = allocVal != null ? allocVal : 0;
+      var d = demandVal != null ? demandVal : 0;
+      signed = a - d;
+    }
+    return Math.abs(signed);
+  }
+
+  function destroySlotDayChart() {
+    try {
+      if (charts.slotDay) charts.slotDay.destroy();
+    } catch (e) {}
+    charts.slotDay = null;
+  }
+
+  function renderSlotDayChartFromCache() {
+    var hintEl = document.getElementById('slotDayHint');
+    var statusEl = document.getElementById('slotDayStatus');
+    var canvas = document.getElementById('slotDayChart');
+    if (!canvas || !slotDayCache.slots.length) {
+      destroySlotDayChart();
+      if (hintEl) hintEl.textContent = '';
+      return;
+    }
+    var plantId = document.getElementById('slotDayPlantSelect').value;
+    if (!plantId) {
+      destroySlotDayChart();
+      if (hintEl) hintEl.textContent = 'Loading plant…';
+      return;
+    }
+    if (statusEl) statusEl.classList.add('d-none');
+    var labels = slotDayCache.slots.map(function (s) {
+      return s.time_block || String(s.slot_index);
+    });
+    var sched = slotDayCache.slots.map(function (s) {
+      return scheduledMwhForSlot(s, plantId);
+    });
+    var demandLine = slotDayCache.slots.map(function (s) {
+      return demandEntryMwhFromSlot(s, plantId);
+    });
+    var diffLine = slotDayCache.slots.map(function (s, i) {
+      return differenceMwhFromSlot(s, sched[i], demandLine[i]);
+    });
+    if (hintEl) {
+      hintEl.textContent =
+        'Showing ' +
+        slotDayCache.slots.length +
+        ' slots for ' +
+        (slotDayCache.plantName || 'plant') +
+        ' · ' +
+        (slotDayCache.consumerName || 'consumer') +
+        ' · ' +
+        slotDayCache.date +
+        '. Bars: approved allocation. Lines: demand entry (gross MWh), difference (|allocation − demand|).';
+    }
+    destroySlotDayChart();
+    charts.slotDay = new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            type: 'bar',
+            label: 'Approved allocation (MWh)',
+            data: sched,
+            backgroundColor: KAI_PRIMARY_FILL,
+            borderColor: KAI_PRIMARY,
+            borderWidth: 1,
+            order: 4,
+          },
+          {
+            type: 'line',
+            label: 'Demand entry (MWh)',
+            data: demandLine,
+            borderColor: KAI_GOLD,
+            backgroundColor: 'rgba(232, 184, 76, 0.15)',
+            borderWidth: 2,
+            fill: false,
+            tension: 0.15,
+            pointRadius: 0,
+            pointHoverRadius: 3,
+            order: 3,
+          },
+          {
+            type: 'line',
+            label: 'Difference (MWh)',
+            data: diffLine,
+            borderColor: KAI_SECONDARY,
+            backgroundColor: 'rgba(243, 84, 93, 0.12)',
+            borderWidth: 2,
+            borderDash: [6, 4],
+            fill: false,
+            tension: 0.15,
+            pointRadius: 0,
+            pointHoverRadius: 3,
+            order: 2,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { labels: { color: '#495057' } },
+          tooltip: {
+            callbacks: {
+              title: function (items) {
+                var i = items[0] && items[0].dataIndex;
+                if (i == null) return '';
+                var sl = slotDayCache.slots[i];
+                return sl ? (sl.time_block || '') + ' (slot ' + sl.slot_index + ')' : '';
+              },
+            },
+          },
+        },
+        scales: {
+          x: {
+            ticks: {
+              color: '#6c757d',
+              maxRotation: 90,
+              minRotation: 45,
+              autoSkip: true,
+              maxTicksLimit: 32,
+            },
+            grid: { display: false },
+          },
+          y: {
+            beginAtZero: true,
+            ticks: { color: '#6c757d' },
+            grid: { color: 'rgba(0,0,0,0.06)' },
+            title: { display: true, text: 'MWh', color: '#6c757d' },
+          },
+        },
+      },
+    });
+  }
+
+  async function loadPlantSlotDaySlots() {
+    var dateEl = document.getElementById('slotDayDate');
+    var plantSel = document.getElementById('slotDayPlantSelect');
+    var statusEl = document.getElementById('slotDayStatus');
+    var hintEl = document.getElementById('slotDayHint');
+    if (!dateEl || !plantSel) return;
+    var date = dateEl.value || tomorrowIsoDate();
+    dateEl.value = date;
+    if (statusEl) {
+      statusEl.classList.add('d-none');
+      statusEl.textContent = '';
+    }
+    destroySlotDayChart();
+    slotDayCache = { date: '', cmId: '', plantId: '', plantName: '', consumerName: '', slots: [], plants: [] };
+    if (hintEl) hintEl.textContent = 'Loading slot data…';
+    var res = await fetchWithAuth('/api/plant/approved-allocation-slots/?date=' + encodeURIComponent(date));
+    var data = await res.json().catch(function () {
+      return {};
+    });
+    if (!res.ok) {
+      plantSel.innerHTML = '<option value="">—</option>';
+      if (statusEl) {
+        statusEl.textContent = data.detail || 'Could not load slot data.';
+        statusEl.classList.remove('d-none');
+      }
+      if (hintEl) hintEl.textContent = '';
+      return;
+    }
+    var plants = data.plants || [];
+    var slots = data.slots || [];
+    var metaPid = plantReportsMeta && plantReportsMeta.plant_id != null ? String(plantReportsMeta.plant_id) : '';
+    if (!plants.length && metaPid) {
+      plants = [
+        {
+          plant_id: parseInt(metaPid, 10),
+          plant_name: plantReportsMeta.plant_name || 'My plant',
+        },
+      ];
+    }
+    plantSel.innerHTML = plants
+      .map(function (p) {
+        return (
+          '<option value="' +
+          p.plant_id +
+          '">' +
+          escapeHtml(p.plant_name || 'Plant ' + p.plant_id) +
+          '</option>'
+        );
+      })
+      .join('');
+    slotDayCache = {
+      date: date,
+      cmId: String(data.consumer_manager_user_id || ''),
+      plantId: '',
+      plantName: '',
+      consumerName: data.consumer_name || '',
+      slots: slots,
+      plants: plants,
+    };
+    if (plants.length) {
+      plantSel.value = String(plants[0].plant_id);
+    } else if (metaPid) {
+      plantSel.value = metaPid;
+    }
+    updateSlotDayPlantName();
+    renderSlotDayChartFromCache();
+  }
+
+  function updateSlotDayPlantName() {
+    var plantSel = document.getElementById('slotDayPlantSelect');
+    if (!plantSel || !plantSel.value) {
+      slotDayCache.plantId = '';
+      slotDayCache.plantName = '';
+      return;
+    }
+    slotDayCache.plantId = plantSel.value;
+    var opt = plantSel.options[plantSel.selectedIndex];
+    slotDayCache.plantName = opt ? opt.textContent : '';
+  }
+
+  function exportSlotDayCsv() {
+    if (!slotDayCache.slots.length || !slotDayCache.plantId) {
+      window.alert('Load slot data first, then export.');
+      return;
+    }
+    var pid = slotDayCache.plantId;
+    var rows = [
+      ['Slot', 'Time block', 'Approved allocation (MWh)', 'Demand entry (MWh)', 'Difference (MWh)'],
+    ];
+    slotDayCache.slots.forEach(function (s) {
+      rows.push([
+        String(s.slot_index),
+        s.time_block || '',
+        fmtNum(scheduledMwhForSlot(s, pid), 4),
+        fmtNum(demandEntryMwhFromSlot(s, pid), 4),
+        fmtNum(
+          differenceMwhFromSlot(
+            s,
+            scheduledMwhForSlot(s, pid),
+            demandEntryMwhFromSlot(s, pid)
+          ),
+          4
+        ),
+      ]);
+    });
+    var fname = 'plant-report-slots_' + slotDayCache.date + '_plant-' + String(pid).replace(/[^\w-]+/g, '_') + '.csv';
+    downloadCsv(fname, rows);
+  }
+
+  function initSlotDayPanel() {
+    var dEl = document.getElementById('slotDayDate');
+    var fromAlloc = document.getElementById('fromDate-allocation');
+    if (dEl) {
+      if (fromAlloc && fromAlloc.value) dEl.value = fromAlloc.value;
+      else dEl.value = tomorrowIsoDate();
+    }
+    var dateEl = document.getElementById('slotDayDate');
+    if (dateEl) {
+      dateEl.addEventListener('change', function () {
+        loadPlantSlotDaySlots();
+      });
+    }
+    var plantSel = document.getElementById('slotDayPlantSelect');
+    if (plantSel) {
+      plantSel.addEventListener('change', function () {
+        updateSlotDayPlantName();
+        renderSlotDayChartFromCache();
+      });
+    }
+    var ex = document.getElementById('exportBtn-slotDay');
+    if (ex) ex.addEventListener('click', exportSlotDayCsv);
+    loadPlantSlotDaySlots();
+  }
+
+  function copySectionPayload(data) {
+    return {
+      scope: data.scope,
+      kpis: Object.assign({}, data.kpis || {}),
+      demand_only: !!data.demand_only,
+      series: JSON.parse(JSON.stringify(data.series || [])),
+      plant_reports_meta: data.plant_reports_meta ? JSON.parse(JSON.stringify(data.plant_reports_meta)) : null,
+    };
+  }
+
+  function destroyChart(key) {
+    try {
+      if (charts[key]) charts[key].destroy();
+    } catch (e) {}
+    charts[key] = null;
+  }
+
+  function fmtNum(x, d) {
+    var n = parseFloat(x);
+    if (Number.isNaN(n)) return '—';
+    return n.toFixed(d != null ? d : 2);
+  }
+
+  function escapeHtml(s) {
+    if (s == null || s === '') return '';
+    var div = document.createElement('div');
+    div.textContent = s;
+    return div.innerHTML;
+  }
+
+  function csvEscapeCell(cell) {
+    var s = String(cell == null ? '' : cell);
+    if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  }
+
+  function downloadCsv(filename, rows) {
+    var bom = '\uFEFF';
+    var lines = rows.map(function (row) {
+      return row.map(csvEscapeCell).join(',');
+    });
+    var blob = new Blob([bom + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function exportSectionCsv(section) {
+    var fromEl = document.getElementById('fromDate-' + section);
+    var toEl = document.getElementById('toDate-' + section);
+    var from = fromEl && fromEl.value;
+    var to = toEl && toEl.value;
+    if (!from || !to) {
+      window.alert('Select From and To dates before exporting.');
+      return;
+    }
+    var d = sectionData[section];
+    if (!d || !d.series || !d.series.length) {
+      window.alert('No data to export for this range. Adjust dates and wait for the chart to refresh, or try again.');
+      return;
+    }
+    var rows;
+    var fname;
+    var scope = d.scope;
+    if (scope === 'admin') {
+      rows = [['Date', 'Demand (MWh)']];
+      d.series.forEach(function (s) {
+        var day = s.date != null ? String(s.date) : String(s.date_label || '');
+        rows.push([day, fmtNum(s.demand_mwh, 4)]);
+      });
+    } else if (scope === 'plant_reports') {
+      rows = [['Date', 'Approved allocation (MWh)', 'Demand entry (MWh)', 'Difference (MWh)']];
+      d.series.forEach(function (s) {
+        var day = s.date != null ? String(s.date) : String(s.date_label || '');
+        var ap = parseFloat(s.approved_allocation_mwh != null ? s.approved_allocation_mwh : s.allocated_mwh) || 0;
+        var de = parseFloat(s.demand_entry_mwh != null ? s.demand_entry_mwh : s.supply_mwh) || 0;
+        rows.push([day, fmtNum(ap, 4), fmtNum(de, 4), fmtNum(Math.abs(ap - de), 4)]);
+      });
+    } else {
+      rows = [['Date', 'Allocated (MWh)', 'Unmet (MWh)']];
+      d.series.forEach(function (s) {
+        var day = s.date != null ? String(s.date) : String(s.date_label || '');
+        var dem = parseFloat(s.demand_mwh) || 0;
+        var alloc = parseFloat(s.allocated_mwh) || 0;
+        rows.push([day, fmtNum(alloc, 4), fmtNum(Math.max(dem - alloc, 0), 4)]);
+      });
+    }
+    fname = 'plant-report-allocation_' + from + '_to_' + to + '.csv';
+    downloadCsv(fname, rows);
+  }
+
+  function inclusiveDayCount(fromStr, toStr) {
+    if (!fromStr || !toStr) return 0;
+    var a = new Date(fromStr + 'T12:00:00');
+    var b = new Date(toStr + 'T12:00:00');
+    if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return 0;
+    return Math.round((b - a) / 86400000) + 1;
+  }
+
+  function updateRangeHint(section, fromStr, toStr, rowCount) {
+    var el = document.getElementById('rangeHint-' + section);
+    if (!el) return;
+    if (!fromStr || !toStr) {
+      el.textContent = '';
+      return;
+    }
+    var n = inclusiveDayCount(fromStr, toStr);
+    var msg =
+      'Each row is one calendar day. Inclusive range: ' +
+      n +
+      ' day' +
+      (n === 1 ? '' : 's') +
+      ' (' +
+      fromStr +
+      ' → ' +
+      toStr +
+      ').';
+    if (rowCount != null && rowCount !== n) {
+      msg += ' Showing ' + rowCount + ' row(s).';
+    }
+    el.textContent = msg;
+  }
+
+  function setDefaultDateInputs(series) {
+    if (!series.length) {
+      var today = new Date().toISOString().split('T')[0];
+      SECTIONS.forEach(function (sec) {
+        var f = document.getElementById('fromDate-' + sec);
+        var t = document.getElementById('toDate-' + sec);
+        if (f) f.value = today;
+        if (t) t.value = today;
+      });
+      return;
+    }
+    var first = series[0].date;
+    var last = series[series.length - 1].date;
+    SECTIONS.forEach(function (sec) {
+      var f = document.getElementById('fromDate-' + sec);
+      var to = document.getElementById('toDate-' + sec);
+      if (f) f.value = first;
+      if (to) to.value = last;
+    });
+  }
+
+  function cardHtml(dateLabel, sub, val, unit) {
+    return (
+      '<div class="col-6 col-md-4 col-lg-3">' +
+      '<div class="card card-round h-100 text-center kai-reports-grid-card">' +
+      '<div class="card-body py-3">' +
+      '<p class="text-muted small mb-1">' +
+      escapeHtml(sub) +
+      '</p>' +
+      '<p class="text-muted mb-2" style="font-size:0.75rem">' +
+      escapeHtml(dateLabel) +
+      '</p>' +
+      '<p class="h5 fw-bold text-primary mb-0 tabular-nums">' +
+      val +
+      ' <span class="text-muted fw-normal fs-6">' +
+      escapeHtml(unit) +
+      '</span></p>' +
+      '</div></div></div>'
+    );
+  }
+
+  function emptyRowHtml(colspan, msg) {
+    return (
+      '<tr><td colspan="' +
+      colspan +
+      '" class="py-4 text-center text-muted small">' +
+      escapeHtml(msg) +
+      '</td></tr>'
+    );
+  }
+
+  function renderAllocationPart(scope, series, kpis) {
+    var allocHead = document.getElementById('allocationTheadRow');
+    var allocBody = document.getElementById('allocationTableBody');
+    var allocGrid = document.getElementById('allocation-grid');
+
+    var labels = series.map(function (s) {
+      return s.date_label || s.date;
+    });
+    destroyChart('allocation');
+    var allocCtx = document.getElementById('allocationChart');
+
+    if (scope === 'admin') {
+      allocHead.innerHTML =
+        '<th>Date</th><th>Demand (MWh)</th><th>Scheduled supply (ref.)</th>';
+      allocBody.innerHTML = series.length
+        ? series
+            .map(function (s) {
+              return (
+                '<tr><td>' +
+                escapeHtml(String(s.date_label || s.date)) +
+                '</td><td class="tabular-nums">' +
+                fmtNum(s.demand_mwh, 4) +
+                '</td><td class="text-muted small">See platform summary</td></tr>'
+              );
+            })
+            .join('')
+        : emptyRowHtml(3, 'No rows in this date range.');
+      allocGrid.innerHTML = series.length
+        ? series
+            .map(function (s) {
+              return cardHtml(String(s.date_label || s.date), 'Demand', fmtNum(s.demand_mwh, 2), 'MWh');
+            })
+            .join('')
+        : '<div class="col-12"><p class="text-muted text-center py-4 mb-0">No data in range.</p></div>';
+      var demandData = series.map(function (s) {
+        return parseFloat(s.demand_mwh) || 0;
+      });
+      charts.allocation = new Chart(allocCtx, {
+        type: 'bar',
+        data: {
+          labels: labels.length ? labels : ['—'],
+          datasets: [
+            {
+              label: 'Platform demand (MWh)',
+              data: labels.length ? demandData : [0],
+              backgroundColor: KAI_PRIMARY_FILL,
+              borderColor: KAI_PRIMARY,
+              borderWidth: 1,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { labels: { color: '#495057' } } },
+          datasets: { bar: histogramBarOptions },
+          scales: {
+            x: { ticks: { color: '#6c757d' }, grid: { display: false }, offset: true },
+            y: { beginAtZero: true, ticks: { color: '#6c757d' }, grid: { color: 'rgba(0,0,0,0.06)' } },
+          },
+        },
+      });
+      return;
+    }
+
+    if (scope === 'plant_reports') {
+      allocHead.innerHTML =
+        '<th>Date</th><th>Approved allocation (MWh)</th><th>Demand entry (MWh)</th><th>Difference (MWh)</th>';
+      allocBody.innerHTML = series.length
+        ? series
+            .map(function (s) {
+              var ap = parseFloat(s.approved_allocation_mwh != null ? s.approved_allocation_mwh : s.allocated_mwh) || 0;
+              var de = parseFloat(s.demand_entry_mwh != null ? s.demand_entry_mwh : s.supply_mwh) || 0;
+              var diff = Math.abs(ap - de);
+              return (
+                '<tr><td>' +
+                escapeHtml(String(s.date_label || s.date)) +
+                '</td><td class="tabular-nums">' +
+                fmtNum(ap, 4) +
+                '</td><td class="tabular-nums">' +
+                fmtNum(de, 4) +
+                '</td><td class="tabular-nums">' +
+                fmtNum(diff, 4) +
+                '</td></tr>'
+              );
+            })
+            .join('')
+        : emptyRowHtml(4, 'No rows in this date range.');
+      allocGrid.innerHTML = series.length
+        ? series
+            .map(function (s) {
+              var ap = parseFloat(s.approved_allocation_mwh != null ? s.approved_allocation_mwh : s.allocated_mwh) || 0;
+              return cardHtml(String(s.date_label || s.date), 'Approved allocation', fmtNum(ap, 2), 'MWh');
+            })
+            .join('')
+        : '<div class="col-12"><p class="text-muted text-center py-4 mb-0">No data in range.</p></div>';
+
+      var approvedBars = series.map(function (s) {
+        return parseFloat(s.approved_allocation_mwh != null ? s.approved_allocation_mwh : s.allocated_mwh) || 0;
+      });
+      var demandLineSeries = series.map(function (s) {
+        return parseFloat(s.demand_entry_mwh != null ? s.demand_entry_mwh : s.supply_mwh) || 0;
+      });
+      var diffLineSeries = series.map(function (s, i) {
+        var ap = approvedBars[i] != null ? approvedBars[i] : 0;
+        var de = demandLineSeries[i] != null ? demandLineSeries[i] : 0;
+        return Math.abs(ap - de);
+      });
+      charts.allocation = new Chart(allocCtx, {
+        type: 'bar',
+        data: {
+          labels: labels.length ? labels : ['—'],
+          datasets: [
+            {
+              type: 'bar',
+              label: 'Approved allocation (MWh)',
+              data: labels.length ? approvedBars : [0],
+              backgroundColor: KAI_PRIMARY_FILL,
+              borderColor: KAI_PRIMARY,
+              borderWidth: 1,
+              order: 4,
+            },
+            {
+              type: 'line',
+              label: 'Demand entry (MWh)',
+              data: labels.length ? demandLineSeries : [0],
+              borderColor: KAI_GOLD,
+              backgroundColor: 'rgba(232, 184, 76, 0.12)',
+              borderWidth: 2,
+              fill: false,
+              tension: 0.2,
+              pointRadius: 0,
+              pointHoverRadius: 4,
+              order: 3,
+            },
+            {
+              type: 'line',
+              label: 'Difference (MWh)',
+              data: labels.length ? diffLineSeries : [0],
+              borderColor: KAI_SECONDARY,
+              backgroundColor: 'rgba(243, 84, 93, 0.1)',
+              borderWidth: 2,
+              borderDash: [6, 4],
+              fill: false,
+              tension: 0.2,
+              pointRadius: 0,
+              pointHoverRadius: 4,
+              order: 2,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: { legend: { labels: { color: '#495057' } } },
+          datasets: { bar: histogramBarOptions },
+          scales: {
+            x: { ticks: { color: '#6c757d' }, grid: { display: false }, offset: true },
+            y: {
+              beginAtZero: true,
+              ticks: { color: '#6c757d' },
+              grid: { color: 'rgba(0,0,0,0.06)' },
+            },
+          },
+        },
+      });
+      return;
+    }
+
+    allocHead.innerHTML = '<th>Date</th><th>Allocated (MWh)</th><th>Unmet (MWh)</th>';
+    allocBody.innerHTML = series.length
+      ? series
+          .map(function (s) {
+            var dem = parseFloat(s.demand_mwh) || 0;
+            var alloc = parseFloat(s.allocated_mwh) || 0;
+            var unmet = Math.max(dem - alloc, 0);
+            return (
+              '<tr><td>' +
+              escapeHtml(String(s.date_label || s.date)) +
+              '</td><td class="tabular-nums">' +
+              fmtNum(alloc, 4) +
+              '</td><td class="tabular-nums">' +
+              fmtNum(unmet, 4) +
+              '</td></tr>'
+            );
+          })
+          .join('')
+      : emptyRowHtml(3, 'No rows in this date range.');
+    allocGrid.innerHTML = series.length
+      ? series
+          .map(function (s) {
+            var alloc = parseFloat(s.allocated_mwh) || 0;
+            return cardHtml(String(s.date_label || s.date), 'Allocated', fmtNum(alloc, 2), 'MWh');
+          })
+          .join('')
+      : '<div class="col-12"><p class="text-muted text-center py-4 mb-0">No data in range.</p></div>';
+
+    var allocData = series.map(function (s) {
+      return parseFloat(s.allocated_mwh) || 0;
+    });
+    var unmetData = series.map(function (s) {
+      var dem = parseFloat(s.demand_mwh) || 0;
+      var a = parseFloat(s.allocated_mwh) || 0;
+      return Math.max(dem - a, 0);
+    });
+    charts.allocation = new Chart(allocCtx, {
+      type: 'bar',
+      data: {
+        labels: labels.length ? labels : ['—'],
+        datasets: [
+          {
+            label: 'Allocated (MWh)',
+            data: labels.length ? allocData : [0],
+            backgroundColor: KAI_PRIMARY_FILL,
+            borderColor: KAI_PRIMARY,
+            borderWidth: 1,
+          },
+          {
+            label: 'Unmet (MWh)',
+            data: labels.length ? unmetData : [0],
+            backgroundColor: KAI_SECONDARY_FILL,
+            borderColor: KAI_SECONDARY,
+            borderWidth: 1,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: '#495057' } } },
+        datasets: { bar: histogramBarOptions },
+        scales: {
+          x: { ticks: { color: '#6c757d' }, grid: { display: false }, offset: true },
+          y: { beginAtZero: true, ticks: { color: '#6c757d' }, grid: { color: 'rgba(0,0,0,0.06)' } },
+        },
+      },
+    });
+  }
+
+  function renderSectionSlice(section) {
+    var d = sectionData[section];
+    if (!d) return;
+    var scope = d.scope;
+    var kpis = d.kpis || {};
+    var series = d.series || [];
+    if (section === 'allocation') renderAllocationPart(scope, series, kpis);
+  }
+
+  window.applyFilters = async function (section) {
+    var fromEl = document.getElementById('fromDate-' + section);
+    var toEl = document.getElementById('toDate-' + section);
+    var viewEl = document.getElementById('view-' + section);
+    if (!fromEl || !toEl || !viewEl) return;
+
+    var fromDate = fromEl.value;
+    var toDate = toEl.value;
+    var view = viewEl.value;
+
+    if (!fromDate || !toDate) {
+      window.alert('Please select a date range (From and To).');
+      return;
+    }
+    if (fromDate > toDate) {
+      window.alert('From date must be on or before To date.');
+      return;
+    }
+
+    var url = '/api/reports/summary/?from=' + encodeURIComponent(fromDate) + '&to=' + encodeURIComponent(toDate);
+    var res = await fetchWithAuth(url);
+    var data = await res.json().catch(function () {
+      return {};
+    });
+    if (!res.ok) {
+      window.alert(data.detail || 'Could not load data for this range.');
+      return;
+    }
+    sectionData[section] = copySectionPayload(data);
+    var scopeEl = document.getElementById('reportsScope');
+    var kpis = data.kpis || {};
+    if (scopeEl && kpis.subtitle != null) scopeEl.textContent = kpis.subtitle || '';
+    renderSectionSlice(section);
+    window.switchView(section, view);
+    updateRangeHint(section, fromDate, toDate, (data.series || []).length);
+  };
+
+  function bindSectionFilters(section) {
+    var dateDebounce = null;
+    ['fromDate-' + section, 'toDate-' + section].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) {
+        el.addEventListener('change', function () {
+          clearTimeout(dateDebounce);
+          dateDebounce = setTimeout(function () {
+            window.applyFilters(section);
+          }, 400);
+        });
+      }
+    });
+
+    var viewEl = document.getElementById('view-' + section);
+    if (viewEl) {
+      viewEl.addEventListener('change', function () {
+        window.switchView(section, viewEl.value);
+      });
+    }
+
+    function enterApply(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        window.applyFilters(section);
+      }
+    }
+    ['fromDate-' + section, 'toDate-' + section, 'view-' + section].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.addEventListener('keydown', enterApply);
+    });
+  }
+
+  async function load() {
+    var errEl = document.getElementById('reportsError');
+    var content = document.getElementById('reportsContent');
+    var scopeEl = document.getElementById('reportsScope');
+    errEl.classList.add('d-none');
+    errEl.textContent = '';
+    content.classList.add('d-none');
+
+    var res = await fetchWithAuth('/api/reports/summary/');
+    var data = await res.json().catch(function () {
+      return {};
+    });
+    if (!res.ok) {
+      errEl.textContent = data.detail || 'Could not load reports.';
+      errEl.classList.remove('d-none');
+      if (scopeEl) scopeEl.textContent = '';
+      return;
+    }
+
+    var kpis = data.kpis || {};
+    var series = data.series || [];
+    plantReportsMeta = data.plant_reports_meta || null;
+
+    SECTIONS.forEach(function (s) {
+      sectionData[s] = copySectionPayload(data);
+    });
+
+    if (scopeEl) scopeEl.textContent = kpis.subtitle || '';
+
+    setDefaultDateInputs(series);
+    SECTIONS.forEach(bindSectionFilters);
+
+    SECTIONS.forEach(function (s) {
+      var f = document.getElementById('fromDate-' + s);
+      var t = document.getElementById('toDate-' + s);
+      var rows = sectionData[s] && sectionData[s].series ? sectionData[s].series.length : 0;
+      updateRangeHint(s, f ? f.value : '', t ? t.value : '', rows);
+      renderSectionSlice(s);
+      var vEl = document.getElementById('view-' + s);
+      window.switchView(s, vEl ? vEl.value : 'graph');
+    });
+
+    content.classList.remove('d-none');
+    initSlotDayPanel();
+  }
+
+  var exportAllocationBtn = document.getElementById('exportBtn-allocation');
+  if (exportAllocationBtn) {
+    exportAllocationBtn.addEventListener('click', function () {
+      exportSectionCsv('allocation');
+    });
+  }
+
+  load();
+})();
+</script>
+{% endblock %}

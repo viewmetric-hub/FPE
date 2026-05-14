@@ -1,0 +1,343 @@
+            <div class="mb-3 pt-2">
+              <div class="page-pretitle">Analytics</div>
+              <h3 class="fw-bold mb-1">Reports</h3>
+              <p id="reportsScope" class="text-muted small mb-0" style="max-width: 42rem">Loading…</p>
+            </div>
+
+            <div id="reportsError" class="alert alert-danger d-none mb-4" role="alert"></div>
+
+            <div id="reportsContent" class="d-none">
+              <p id="reportsKpiFootnote" class="text-muted small mb-4" style="max-width: 42rem">
+                Charts use the selected <strong>From</strong> / <strong>To</strong> date range (inclusive).
+              </p>
+              <p id="reportsKpiFootnoteConsumer" class="text-muted small mb-4 d-none" style="max-width: 42rem">
+                The <strong>overview</strong> chart uses your selected date range: <strong>generator supply</strong> (histogram bars), then <strong>approved accounted</strong> (allocated + IEX gap-fill),
+                <strong>IEX</strong>, and <strong>demand</strong> as lines. <strong>Day view</strong> is one calendar day and one plant, 96 quarter-hour slots.
+              </p>
+
+              <div class="reports-admin-only">
+              <div class="card card-round mb-4 kai-reports-section kai-reports-section-card">
+                <div class="card-header kai-reports-gradient-header border-0">
+                  <div class="card-head-row flex-wrap gap-3">
+                    <div class="card-title mb-0">Demand Analysis</div>
+                    <div class="card-tools d-flex flex-wrap align-items-center gap-2">
+                      <label class="visually-hidden" for="fromDate-demand">From date</label>
+                      <input type="date" id="fromDate-demand" class="form-control form-control-sm kai-reports-control" />
+                      <label class="visually-hidden" for="toDate-demand">To date</label>
+                      <input type="date" id="toDate-demand" class="form-control form-control-sm kai-reports-control" />
+                      <label class="visually-hidden" for="view-demand">View</label>
+                      <select id="view-demand" class="form-select form-select-sm kai-reports-control" style="width: auto; min-width: 7.5rem">
+                        <option value="graph" selected>Histogram</option>
+                        <option value="table">Table</option>
+                        <option value="grid">Grid</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <p id="rangeHint-demand" class="text-muted small mb-3" aria-live="polite"></p>
+                  <div class="kai-reports-chart-inner mb-2">
+                    <div id="demand-graph" class="kai-reports-chart-box">
+                      <canvas id="demandChart"></canvas>
+                    </div>
+                  </div>
+                  <div id="demand-table" class="d-none kai-edit-slots-wrap kai-reports-table-wrap table-responsive mt-3">
+                    <table class="table table-striped table-hover table-sm align-middle kai-edit-slots-table mb-0">
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>Demand (MWh)</th>
+                        </tr>
+                      </thead>
+                      <tbody id="demandTableBody"></tbody>
+                    </table>
+                  </div>
+                  <div id="demand-grid" class="row g-3 d-none mt-1"></div>
+                </div>
+              </div>
+
+              <div class="card card-round mb-4 kai-reports-section kai-reports-section-card">
+                <div class="card-header kai-reports-gradient-header border-0">
+                  <div class="card-head-row flex-wrap gap-3">
+                    <div class="card-title mb-0">Allocation Analysis</div>
+                    <div class="card-tools d-flex flex-wrap align-items-center gap-2">
+                      <label class="visually-hidden" for="fromDate-allocation">From date</label>
+                      <input type="date" id="fromDate-allocation" class="form-control form-control-sm kai-reports-control" />
+                      <label class="visually-hidden" for="toDate-allocation">To date</label>
+                      <input type="date" id="toDate-allocation" class="form-control form-control-sm kai-reports-control" />
+                      <label class="visually-hidden" for="view-allocation">View</label>
+                      <select id="view-allocation" class="form-select form-select-sm kai-reports-control" style="width: auto; min-width: 7.5rem">
+                        <option value="graph" selected>Histogram</option>
+                        <option value="table">Table</option>
+                        <option value="grid">Grid</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <p id="rangeHint-allocation" class="text-muted small mb-3" aria-live="polite"></p>
+                  <div class="kai-reports-chart-inner mb-2">
+                    <div id="allocation-graph" class="kai-reports-chart-box">
+                      <canvas id="allocationChart"></canvas>
+                    </div>
+                  </div>
+                  <div id="allocation-table" class="d-none kai-edit-slots-wrap kai-reports-table-wrap table-responsive mt-3">
+                    <table class="table table-striped table-hover table-sm align-middle kai-edit-slots-table mb-0">
+                      <thead>
+                        <tr id="allocationTheadRow"></tr>
+                      </thead>
+                      <tbody id="allocationTableBody"></tbody>
+                    </table>
+                  </div>
+                  <div id="allocation-grid" class="row g-3 d-none mt-1"></div>
+                </div>
+              </div>
+              </div>
+
+              <div class="reports-consumer-only d-none">
+              <div class="card card-round mb-4 kai-reports-section kai-reports-section-card">
+                <div class="card-header kai-reports-gradient-header border-0">
+                  <div class="card-head-row flex-wrap gap-3">
+                    <div>
+                      <div class="card-title mb-0">Supply &amp; demand overview</div>
+                      <small class="text-muted d-block mt-1" style="max-width: 40rem">
+                        All plants. Daily totals: <strong class="text-white">generator supply</strong> (bars),
+                        <strong class="text-white">approved accounted</strong>, <strong class="text-white">IEX</strong>, and <strong class="text-white">demand</strong> (lines). Same basis as the generator approved-allocation view.
+                      </small>
+                    </div>
+                    <div class="card-tools d-flex flex-wrap align-items-center gap-2">
+                      <label class="visually-hidden" for="fromDate-cmOverview">From date</label>
+                      <input type="date" id="fromDate-cmOverview" class="form-control form-control-sm kai-reports-control" />
+                      <label class="visually-hidden" for="toDate-cmOverview">To date</label>
+                      <input type="date" id="toDate-cmOverview" class="form-control form-control-sm kai-reports-control" />
+                      <label class="visually-hidden" for="view-cmOverview">View</label>
+                      <select id="view-cmOverview" class="form-select form-select-sm kai-reports-control" style="width: auto; min-width: 7.5rem">
+                        <option value="graph" selected>Histogram</option>
+                        <option value="table">Table</option>
+                        <option value="grid">Grid</option>
+                      </select>
+                      <button type="button" id="exportBtn-cmOverview" class="btn btn-label-primary btn-sm" title="Download CSV for the selected From/To range and current data">
+                        <span class="btn-label"><i class="fas fa-file-download"></i></span>
+                        Export
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <p id="rangeHint-cmOverview" class="text-muted small mb-3" aria-live="polite"></p>
+                  <div class="kai-reports-chart-inner mb-2">
+                    <div id="cmOverview-graph" class="kai-reports-chart-box">
+                      <canvas id="cmOverviewChart"></canvas>
+                    </div>
+                  </div>
+                  <div id="cmOverview-table" class="d-none kai-edit-slots-wrap kai-reports-table-wrap table-responsive mt-3">
+                    <table class="table table-striped table-hover table-sm align-middle kai-edit-slots-table mb-0">
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>Supply (MWh)</th>
+                          <th>Approved (MWh)</th>
+                          <th>IEX (MWh)</th>
+                          <th>Demand (MWh)</th>
+                        </tr>
+                      </thead>
+                      <tbody id="cmOverviewTableBody"></tbody>
+                    </table>
+                  </div>
+                  <div id="cmOverview-grid" class="row g-3 d-none mt-1"></div>
+                </div>
+              </div>
+
+              <div class="card card-round mb-4 kai-reports-section kai-reports-section-card">
+                <div class="card-header kai-reports-gradient-header border-0">
+                  <div class="card-head-row flex-wrap gap-3">
+                    <div>
+                      <div class="card-title mb-0">Day view (15-min slots)</div>
+                      <small class="text-muted d-block mt-1" style="max-width: 40rem">
+                        Plant-wise. <strong class="text-white">Approved gross supply</strong> (bars),
+                        <strong class="text-white">gross demand</strong> and <strong class="text-white">difference</strong> (lines; |supply − demand|, ≥ 0). Pick a calendar day and plant.
+                      </small>
+                    </div>
+                    <div class="card-tools d-flex flex-wrap align-items-center gap-2">
+                      <label class="visually-hidden" for="cmReportsSlotDayDate">Day</label>
+                      <input type="date" id="cmReportsSlotDayDate" class="form-control form-control-sm kai-reports-control" />
+                      <label class="visually-hidden" for="cmReportsSlotDayPlant">Plant</label>
+                      <select id="cmReportsSlotDayPlant" class="form-select form-select-sm kai-reports-control" style="min-width: 11rem" aria-label="Plant" disabled>
+                        <option value="">Loading…</option>
+                      </select>
+                      <button type="button" id="exportBtn-cmReportsSlotDay" class="btn btn-label-primary btn-sm" title="Download CSV for the selected calendar day and plant">
+                        <span class="btn-label"><i class="fas fa-file-download"></i></span>
+                        Export
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <p id="cmReportsSlotDayHint" class="text-muted small mb-2" aria-live="polite"></p>
+                  <p id="cmReportsSlotDayErr" class="text-danger small mb-2 d-none" role="alert"></p>
+                  <div class="kai-reports-chart-inner mb-2">
+                    <div class="kai-reports-chart-box" style="min-height: 320px">
+                      <canvas id="cmReportsSlotDayChart"></canvas>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="card card-round mb-4 kai-reports-section kai-reports-section-card">
+                <div class="card-header kai-reports-gradient-header border-0">
+                  <div class="card-head-row flex-wrap gap-3">
+                    <div>
+                      <div class="card-title mb-0">Scheduled vs revisions (day-wise)</div>
+                      <small class="text-muted d-block mt-1" style="max-width: 40rem">
+                        Pick one day and a revision. Shows demand, selected revision value, and difference across 96 slots.
+                      </small>
+                    </div>
+                    <div class="card-tools d-flex flex-wrap align-items-center gap-2">
+                      <label class="visually-hidden" for="cmRevisionDate">Date</label>
+                      <input type="date" id="cmRevisionDate" class="form-control form-control-sm kai-reports-control" />
+                      <label class="visually-hidden" for="cmRevisionMode">Revision</label>
+                      <select id="cmRevisionMode" class="form-select form-select-sm kai-reports-control" style="width: auto; min-width: 11rem">
+                        <option value="revision2" selected>Latest revision</option>
+                        <option value="revision1">Revision 1</option>
+                        <option value="submitted">Submitted schedule</option>
+                      </select>
+                      <label class="visually-hidden" for="view-cmRevision">View</label>
+                      <select id="view-cmRevision" class="form-select form-select-sm kai-reports-control" style="width: auto; min-width: 7.5rem">
+                        <option value="graph" selected>Graph</option>
+                        <option value="table">Table</option>
+                        <option value="grid">Grid</option>
+                      </select>
+                      <button type="button" id="exportBtn-cmRevision" class="btn btn-label-primary btn-sm" title="Download CSV for selected date and revision">
+                        <span class="btn-label"><i class="fas fa-file-download"></i></span>
+                        Export
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <p id="cmRevisionHint" class="text-muted small mb-3" aria-live="polite"></p>
+                  <div class="kai-reports-chart-inner mb-2">
+                    <div id="cmRevision-graph" class="kai-reports-chart-box">
+                      <canvas id="cmRevisionChart"></canvas>
+                    </div>
+                  </div>
+                  <div id="cmRevision-table" class="d-none kai-edit-slots-wrap kai-reports-table-wrap table-responsive mt-3">
+                    <table class="table table-striped table-hover table-sm align-middle kai-edit-slots-table mb-0">
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>Revision</th>
+                          <th>Demand (MWh)</th>
+                          <th>Selected revision (MWh)</th>
+                          <th>Difference (MWh)</th>
+                        </tr>
+                      </thead>
+                      <tbody id="cmRevisionTableBody"></tbody>
+                    </table>
+                  </div>
+                  <div id="cmRevision-grid" class="row g-3 d-none mt-1"></div>
+                </div>
+              </div>
+              </div>
+
+              <div id="reportsIexSection" class="card card-round mb-4 kai-reports-section-card">
+                <div class="card-header kai-reports-gradient-header border-0">
+                  <div class="card-head-row">
+                    <div class="card-title">IEX</div>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <section class="mb-4 pb-4 border-bottom">
+                    <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
+                      <div>
+                        <h5 class="fw-semibold mb-1">MCP predictions (ViewMetric)</h5>
+                        <p class="text-muted small mb-0" style="max-width: 42rem">
+                          Slot-wise scraped MCP (₹/kWh) from <strong>viewmetric.in/iex-predictor</strong>.
+                          Full slot table: <a href="{% url 'iex_predictor' %}">IEX Predictor</a>.
+                        </p>
+                      </div>
+                      <button type="button" id="iexMcpPredRefresh" class="btn btn-outline-primary btn-sm shrink-0">Refresh charts</button>
+                    </div>
+                    <p id="iexMcpPredStatus" class="text-muted small mb-3" aria-live="polite"></p>
+                    <div id="iexMcpPredictorDenied" class="d-none alert alert-light border small mb-0"></div>
+                    <div id="iexMcpPredictorContent" class="d-none">
+                      <div class="row g-3 mb-4">
+                        <div class="col-6 col-lg-3">
+                          <div class="card card-light card-round h-100">
+                            <div class="card-body p-3">
+                              <p class="text-muted small mb-1">Avg MCP</p>
+                              <h3 id="iexRepAvgMcp" class="fw-bold mb-0">—</h3>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="col-6 col-lg-3">
+                          <div class="card card-light card-round h-100">
+                            <div class="card-body p-3">
+                              <p class="text-muted small mb-1">Max MCP</p>
+                              <h3 id="iexRepMaxMcp" class="fw-bold mb-0">—</h3>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="col-6 col-lg-3">
+                          <div class="card card-light card-round h-100">
+                            <div class="card-body p-3">
+                              <p class="text-muted small mb-1">Min MCP</p>
+                              <h3 id="iexRepMinMcp" class="fw-bold mb-0">—</h3>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="col-6 col-lg-3">
+                          <div class="card card-light card-round h-100">
+                            <div class="card-body p-3">
+                              <p class="text-muted small mb-1">High price slots (&gt; 5 ₹/kWh)</p>
+                              <h3 id="iexRepHighSlots" class="fw-bold mb-0">—</h3>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="row g-3 align-items-start">
+                        <div class="col-12 col-lg-8">
+                          <div class="card card-light card-round">
+                            <div class="card-body pb-3">
+                              <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h5 class="fw-semibold mb-0">MCP trend</h5>
+                                <span class="text-muted small">₹/kWh</span>
+                              </div>
+                              <div class="kai-reports-chart-box kai-reports-iex-mcp-trend">
+                                <canvas id="iexRepMcpTrend"></canvas>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="col-12 col-lg-4">
+                          <div class="card card-light card-round">
+                            <div class="card-body d-flex flex-column pb-3">
+                              <h5 class="fw-semibold mb-0">Price level mix</h5>
+                              <p class="text-muted small mb-2">Slot count by level</p>
+                              <div class="kai-reports-chart-box kai-reports-iex-mcp-donut-wrap d-flex align-items-center justify-content-center">
+                                <canvas id="iexRepMcpDonut"></canvas>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div id="iexRepDirectionalCard" class="d-none card card-light card-round mt-3">
+                        <div class="card-body">
+                          <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                            <div>
+                              <h5 class="fw-semibold mb-1">Directional accuracy</h5>
+                              <p class="text-muted small mb-0">When actual MCP exists, compares up/down vs prediction.</p>
+                            </div>
+                            <div class="d-flex align-items-baseline gap-2">
+                              <span class="text-muted small">Accuracy</span>
+                              <span id="iexRepDirectionalVal" class="h4 fw-bold text-primary mb-0">—</span>
+                              <span class="text-muted small">%</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+              </div>
+            </div>

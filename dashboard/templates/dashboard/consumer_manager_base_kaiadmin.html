@@ -1,0 +1,195 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <title>{% block title %}ViewMetric — Consumer Manager{% endblock %}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, shrink-to-fit=no" />
+    <link rel="icon" href="{% static 'kaiadmin/assets/img/kaiadmin/favicon.ico' %}" type="image/x-icon" />
+    <script src="{% static 'kaiadmin/assets/js/plugin/webfont/webfont.min.js' %}"></script>
+    <script>
+      WebFont.load({
+        google: { families: ["Public Sans:300,400,500,600,700"] },
+        custom: {
+          families: ["Font Awesome 5 Solid", "Font Awesome 5 Regular", "simple-line-icons"],
+          urls: ["{% static 'kaiadmin/assets/css/fonts.min.css' %}"],
+        },
+        active: function () {
+          sessionStorage.fonts = true;
+        },
+      });
+    </script>
+    <link rel="stylesheet" href="{% static 'kaiadmin/assets/css/bootstrap.min.css' %}" />
+    <link rel="stylesheet" href="{% static 'kaiadmin/assets/css/plugins.min.css' %}" />
+    <link rel="stylesheet" href="{% static 'kaiadmin/assets/css/kaiadmin.min.css' %}" />
+    <link rel="stylesheet" href="{% static 'kaiadmin/assets/css/demo.css' %}" />
+    <style>
+      .kai-stat-row .card-stats { height: 100%; min-height: 148px; }
+      .kai-stat-row .card-stats .card-body { height: 100%; min-height: 140px; display: flex; align-items: center; }
+      .kai-stat-row .card-stats .numbers { width: 100%; }
+      .logo .kai-brand-logo {
+        display: block;
+        max-height: 40px;
+        max-width: 200px;
+        width: auto;
+        height: auto;
+        object-fit: contain;
+      }
+      .kai-dashboard-1 .main-panel > .container {
+        margin-top: 0 !important;
+        min-height: calc(100vh - 24px) !important;
+      }
+    </style>
+    {% block extra_head %}{% endblock %}
+  </head>
+  <body class="kai-dashboard-1">
+    <script>
+      if (!localStorage.getItem('accessToken')) {
+        window.location.href = '/login/';
+      }
+    </script>
+    <div class="wrapper">
+      <div class="sidebar sidebar-style-2" data-background-color="dark">
+        <div class="sidebar-logo">
+          <div class="logo-header" data-background-color="dark">
+            <a href="{% url 'consumer_manager_dashboard' %}" class="logo">
+              <img
+                id="kaiSidebarLogo"
+                src="{% static 'kaiadmin/assets/img/kaiadmin/icon.svg' %}"
+                alt=""
+                class="navbar-brand kai-brand-logo"
+              />
+            </a>
+            <div class="nav-toggle">
+              <button class="btn btn-toggle toggle-sidebar" type="button" aria-label="Toggle sidebar"><i class="gg-menu-right"></i></button>
+              <button class="btn btn-toggle sidenav-toggler" type="button" aria-label="Pin sidebar"><i class="gg-menu-left"></i></button>
+            </div>
+          </div>
+        </div>
+        <div class="sidebar-wrapper scrollbar scrollbar-inner">
+          <div class="sidebar-content">
+            <ul class="nav nav-secondary">
+              <li class="nav-section"><span class="sidebar-mini-icon"><i class="fa fa-ellipsis-h"></i></span><h4 class="text-section" id="kaiSidebarSectionTitle">Consumer Manager</h4></li>
+              <li class="nav-item{% if kai_active_nav == 'dashboard' %} active{% endif %}">
+                <a href="{% url 'consumer_manager_dashboard' %}"><i class="fas fa-home"></i><p>Dashboard</p></a>
+              </li>
+              <li class="nav-item{% if kai_active_nav == 'plant_mgmt' %} active{% endif %}">
+                <a href="{% url 'plant_management' %}"><i class="fas fa-industry"></i><p>Plant Management</p></a>
+              </li>
+              <li class="nav-item{% if kai_active_nav == 'demand_entry' %} active{% endif %}">
+                <a href="{% url 'consumer_demand_entry' %}"><i class="fas fa-th"></i><p>Demand Entry</p></a>
+              </li>
+              <li class="nav-item{% if kai_active_nav == 'allocation' %} active{% endif %}">
+                <a href="{% url 'consumer_allocation' %}"><i class="fas fa-calendar"></i><p>Allocations</p></a>
+              </li>
+              <li class="nav-item{% if kai_active_nav == 'plantwise' %} active{% endif %}">
+                <a href="{% url 'consumer_plantwise_allocation' %}"><i class="fas fa-project-diagram"></i><p>Plantwise Allocation</p></a>
+              </li>
+              <li class="nav-item{% if kai_active_nav == 'iex' %} active{% endif %}">
+                <a href="{% url 'iex_predictor' %}"><i class="fas fa-chart-line"></i><p>IEX Predictor</p></a>
+              </li>
+              <li class="nav-item{% if kai_active_nav == 'reports' %} active{% endif %}">
+                <a href="{% url 'reports' %}"><i class="fas fa-chart-bar"></i><p>Reports</p></a>
+              </li>
+              <li class="nav-item{% if kai_active_nav == 'settings' %} active{% endif %}">
+                <a href="{% url 'settings' %}"><i class="fas fa-cog"></i><p>Settings</p></a>
+              </li>
+              <li class="nav-item">
+                <a href="{% url 'logout' %}"><i class="fas fa-sign-out-alt"></i><p>Logout</p></a>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="main-panel">
+        <div class="container">
+          <div class="page-inner">
+            {% block content %}{% endblock %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="{% static 'kaiadmin/assets/js/core/jquery-3.7.1.min.js' %}"></script>
+    <script src="{% static 'kaiadmin/assets/js/core/popper.min.js' %}"></script>
+    <script src="{% static 'kaiadmin/assets/js/core/bootstrap.min.js' %}"></script>
+    <script src="{% static 'kaiadmin/assets/js/plugin/jquery-scrollbar/jquery.scrollbar.min.js' %}"></script>
+    {% block kai_vendor_scripts %}{% endblock %}
+    <script src="{% static 'kaiadmin/assets/js/kaiadmin.min.js' %}"></script>
+
+    <script>
+(function () {
+  function apiHeaders() {
+    return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + localStorage.getItem('accessToken') };
+  }
+  function headersForRequest(opts) {
+    var o = opts || {};
+    if (o.body instanceof FormData) {
+      return Object.assign(
+        { Authorization: 'Bearer ' + localStorage.getItem('accessToken') },
+        o.headers || {}
+      );
+    }
+    return Object.assign(apiHeaders(), o.headers || {});
+  }
+  async function fetchWithAuth(url, opts) {
+    opts = opts || {};
+    var res = await fetch(url, Object.assign({}, opts, { headers: headersForRequest(opts) }));
+    if (res.status === 401) {
+      var rt = localStorage.getItem('refreshToken');
+      if (rt) {
+        var r = await fetch('/api/token/refresh/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh: rt }),
+        });
+        var d = await r.json().catch(function () { return {}; });
+        if (d.access) {
+          localStorage.setItem('accessToken', d.access);
+          res = await fetch(url, Object.assign({}, opts, { headers: headersForRequest(opts) }));
+        }
+      }
+      if (res.status === 401) window.location.href = '/login/';
+    }
+    return res;
+  }
+  window.kaiFetchWithAuth = fetchWithAuth;
+
+  var KAI_LOGO_FALLBACK = '{% static "kaiadmin/assets/img/kaiadmin/icon.svg" %}';
+  var KAI_CM_SIDEBAR_FALLBACK = 'Consumer Manager';
+
+  function applyKaiConsumerDisplayName(name) {
+    var display =
+      name != null && String(name).trim() ? String(name).trim() : KAI_CM_SIDEBAR_FALLBACK;
+    var sideTitle = document.getElementById('kaiSidebarSectionTitle');
+    if (sideTitle) sideTitle.textContent = display;
+    var dashLead = document.getElementById('kaiDashboardTitleName');
+    if (dashLead) dashLead.textContent = display;
+  }
+  window.kaiApplyConsumerDisplayName = applyKaiConsumerDisplayName;
+
+  async function hydrateKaiBrandLogos() {
+    var side = document.getElementById('kaiSidebarLogo');
+    if (!side) return;
+    try {
+      var res = await fetchWithAuth('/api/me/');
+      var data = await res.json().catch(function () { return {}; });
+      var url = data && data.logo_url;
+      side.src = url || KAI_LOGO_FALLBACK;
+      side.alt = data && data.name ? String(data.name) : 'Logo';
+      applyKaiConsumerDisplayName(data && data.name);
+    } catch (e) {}
+  }
+  window.kaiRefreshBrandLogos = hydrateKaiBrandLogos;
+
+  if (localStorage.getItem('accessToken')) {
+    hydrateKaiBrandLogos();
+  }
+})();
+    </script>
+    <script src="{% static 'js/vm_dashboard_realtime.js' %}"></script>
+    {% block extra_scripts %}{% endblock %}
+  </body>
+</html>

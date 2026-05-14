@@ -1,0 +1,1986 @@
+{% extends "dashboard/consumer_manager_base_kaiadmin.html" %}
+{% load static %}
+
+{% block title %}Plantwise Allocation — ViewMetric{% endblock %}
+
+{% block extra_head %}
+<style>
+  .kai-edit-slots-wrap {
+    max-height: min(58vh, 520px);
+    overflow: auto;
+    border-radius: 12px;
+    border: 1px solid rgba(21, 114, 232, 0.18);
+    box-shadow: 0 6px 24px rgba(21, 114, 232, 0.1);
+    background: #fff;
+  }
+  .kai-edit-slots-wrap.kai-pw-tall {
+    max-height: min(85vh, 720px);
+  }
+  .kai-edit-slots-table {
+    margin-bottom: 0;
+    --bs-table-striped-bg: rgba(21, 114, 232, 0.055);
+    --bs-table-hover-bg: rgba(21, 114, 232, 0.12);
+    border-color: transparent;
+    font-size: 0.875rem;
+  }
+  .kai-edit-slots-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    font-size: 0.68rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: #fff !important;
+    border: none !important;
+    padding: 0.75rem 0.5rem !important;
+    background: linear-gradient(135deg, #1572e8 0%, #1269db 48%, #0d5bbd 100%) !important;
+    box-shadow: 0 3px 10px rgba(21, 114, 232, 0.35);
+    white-space: nowrap;
+  }
+  .kai-edit-slots-table tbody td {
+    vertical-align: middle;
+    border-color: rgba(21, 114, 232, 0.1);
+  }
+  .cm-pw-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1050;
+    padding: 1rem;
+  }
+  .cm-pw-modal-dialog {
+    background: #fff;
+    padding: 1.5rem;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+    max-height: 90vh;
+    overflow: auto;
+    border: 1px solid rgba(21, 114, 232, 0.12);
+  }
+  .cm-pw-modal-dialog.wide {
+    width: 95%;
+    max-width: 1100px;
+  }
+  .cm-pw-modal-dialog.medium {
+    width: 95%;
+    max-width: 900px;
+  }
+  .cm-pw-modal-dialog.xl {
+    width: 98%;
+    max-width: 1400px;
+  }
+  .cm-pw-modal-dialog.sm {
+    width: 95%;
+    max-width: 560px;
+  }
+  .cm-pw-modal-dialog.override {
+    width: 95%;
+    max-width: 480px;
+  }
+  .cm-pw-hour-jump {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 12px;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+  }
+  .btn-hour-jump {
+    min-width: 44px;
+  }
+  .cm-empty-hide:empty {
+    display: none !important;
+  }
+  .ai-slot-approved-row td {
+    background: #e8f7e9 !important;
+  }
+  .ai-slot-revised-row td {
+    background: #fff7cc !important;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+            <div class="mb-3 pt-2">
+              <div class="page-pretitle">Allocation</div>
+              <h3 class="fw-bold mb-1">Plantwise Allocation</h3>
+              <p class="text-muted small mb-0" style="max-width: 42rem">
+                Per-plant demand, base supply, AI pool, slot savings, and day approval.
+              </p>
+            </div>
+
+            <div class="card card-round mb-4">
+              <div class="card-header">
+                <div class="card-head-row">
+                  <div class="card-title">Select day</div>
+                  <div class="card-tools">
+                    <select id="dateSelect" class="form-select form-select-sm" style="min-width: 14rem" aria-label="Select day"></select>
+                  </div>
+                </div>
+              </div>
+              <div class="card-body pt-3">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                  <span class="text-muted small fw-semibold text-uppercase" style="letter-spacing: 0.06em">Plants</span>
+                  <small class="text-muted">Demand vs base supply and actions.</small>
+                </div>
+                <div class="kai-edit-slots-wrap table-responsive">
+                  <table class="table table-striped table-hover align-middle kai-edit-slots-table mb-0" id="plantsTable">
+                    <thead id="plantsThead"></thead>
+                    <tbody id="plantsTbody"></tbody>
+                  </table>
+                </div>
+                <p class="text-muted small mt-3 mb-0" id="statusMsg" aria-live="polite" role="status"></p>
+              </div>
+            </div>
+
+            <section id="belowTableActions" class="card card-round">
+              <div class="card-header">
+                <div class="card-head-row">
+                  <div class="card-title">AI Recommendation &amp; Approval</div>
+                </div>
+              </div>
+              <div class="card-body">
+                <div id="globalAiRecommendationRow" class="d-flex flex-column flex-sm-row flex-wrap align-items-sm-center gap-3 cm-empty-hide"></div>
+                <div id="globalApproveRow" class="mt-4 pt-4 border-top cm-empty-hide"></div>
+              </div>
+            </section>
+
+            <div id="aiRecModal" class="cm-pw-modal-overlay" onclick="event.target===this&&closeAiRecModal()">
+              <div class="cm-pw-modal-dialog wide" onclick="event.stopPropagation()">
+                <h5 class="fw-bold mb-3" id="aiRecModalTitle">AI Recommendation</h5>
+                <div id="aiRecModalBody"></div>
+                <div class="mt-3">
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="closeAiRecModal()">Close</button>
+                </div>
+              </div>
+            </div>
+
+            <div id="slotRecSummaryModal" class="cm-pw-modal-overlay" style="z-index:1200" onclick="event.target===this&&closeSlotRecSummaryModal()">
+              <div class="cm-pw-modal-dialog sm" onclick="event.stopPropagation()">
+                <h5 class="fw-bold mb-3" id="slotRecSummaryModalTitle">Slot summary</h5>
+                <div id="slotRecSummaryModalBody" class="small text-body"></div>
+                <div class="mt-3">
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="closeSlotRecSummaryModal()">Close</button>
+                </div>
+              </div>
+            </div>
+
+            <div id="viewModal" class="cm-pw-modal-overlay" onclick="event.target===this&&closeViewModal()">
+              <div class="cm-pw-modal-dialog medium" onclick="event.stopPropagation()">
+                <h5 class="fw-bold mb-3" id="viewModalTitle">Plant details</h5>
+                <div id="viewModalBody"></div>
+                <div class="mt-3">
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="closeViewModal()">Close</button>
+                </div>
+              </div>
+            </div>
+
+            <div id="aiAllocModal" class="cm-pw-modal-overlay" onclick="event.target===this&&closeAiAllocModal()">
+              <div class="cm-pw-modal-dialog wide" onclick="event.stopPropagation()">
+                <h5 class="fw-bold mb-3" id="aiAllocModalTitle">Approved AI allocations</h5>
+                <div id="aiAllocModalBody"></div>
+                <div class="mt-3">
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="closeAiAllocModal()">Close</button>
+                </div>
+              </div>
+            </div>
+
+            <div id="txLossModal" class="cm-pw-modal-overlay" onclick="event.target===this&&closeTxLossModal()">
+              <div class="cm-pw-modal-dialog wide" onclick="event.stopPropagation()">
+                <h5 class="fw-bold mb-3" id="txLossModalTitle">Final allocation with transmission loss</h5>
+                <div id="txLossModalBody"></div>
+                <div class="mt-3">
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="closeTxLossModal()">Close</button>
+                </div>
+              </div>
+            </div>
+
+            <div id="dayAllocModal" class="cm-pw-modal-overlay" onclick="event.target===this&&closeDayAllocModal()">
+              <div class="cm-pw-modal-dialog xl" onclick="event.stopPropagation()">
+                <h5 class="fw-bold mb-3" id="dayAllocModalTitle">Approved allocation (96 slots)</h5>
+                <div id="dayAllocModalBody"></div>
+                <div class="mt-3">
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="closeDayAllocModal()">Close</button>
+                </div>
+              </div>
+            </div>
+
+            <div id="slotOverrideModal" class="cm-pw-modal-overlay" style="z-index:1100" onclick="event.target===this&&closeSlotOverrideModal()">
+              <div class="cm-pw-modal-dialog override" onclick="event.stopPropagation()">
+                <h5 class="fw-bold mb-2" id="slotOverrideModalTitle">Override slot allocation</h5>
+                <p class="text-muted small mb-2" id="slotOverrideModalHint"></p>
+                <p class="text-muted small mb-3">Current total: <strong id="currentTotal">0.00</strong> MWh</p>
+                <div id="slotOverrideModalBody"></div>
+                <div id="slotOverrideModalErr" class="alert alert-danger py-2 small mt-2 d-none" role="alert"></div>
+                <div class="d-flex flex-wrap gap-2 mt-3">
+                  <button type="button" class="btn btn-primary btn-sm" id="slotOverrideSubmitBtn">Save &amp; approve</button>
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="closeSlotOverrideModal()">Cancel</button>
+                </div>
+              </div>
+            </div>
+
+            <div id="genSupplyOverrideModal" class="cm-pw-modal-overlay" style="z-index:1250" onclick="event.target===this&&closeGenSupplyOverrideModal()">
+              <div class="cm-pw-modal-dialog medium" onclick="event.stopPropagation()">
+                <h5 class="fw-bold mb-2" id="genSupplyOverrideModalTitle">Override generator supply</h5>
+                <p class="text-muted small mb-2">Adjust MWh for changed slots in this revision. Locked real-time slots cannot be overridden.</p>
+                <div class="table-responsive">
+                  <table class="table table-sm align-middle">
+                    <thead>
+                      <tr>
+                        <th>Slot</th>
+                        <th>Previous</th>
+                        <th>Generator</th>
+                        <th>Override</th>
+                      </tr>
+                    </thead>
+                    <tbody id="genSupplyOverrideTbody"></tbody>
+                  </table>
+                </div>
+                <div id="genSupplyOverrideErr" class="alert alert-danger py-2 small mt-2 d-none" role="alert"></div>
+                <div class="d-flex flex-wrap gap-2 mt-3">
+                  <button type="button" class="btn btn-primary btn-sm" id="genSupplyOverrideSubmitBtn">Apply override</button>
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="closeGenSupplyOverrideModal()">Cancel</button>
+                </div>
+              </div>
+            </div>
+{% endblock %}
+
+{% block extra_scripts %}
+  <script>
+(function () {
+    var fetchWithAuth = window.kaiFetchWithAuth;
+    if (!fetchWithAuth) return;
+
+    let plantwiseTimeslotVariationCount = 7;
+    function getTimeslotVariationCount() {
+      return plantwiseTimeslotVariationCount;
+    }
+    async function refreshUserSlotVariationPrefs() {
+      try {
+        const res = await fetchWithAuth('/api/me/', { method: 'GET' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return;
+        const n = parseInt(data.plantwise_timeslot_variation_count, 10);
+        if (!Number.isNaN(n) && n >= 0 && n <= 96) plantwiseTimeslotVariationCount = n;
+      } catch (e) {}
+    }
+
+    function toDateStr(d) {
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth()+1).padStart(2,'0');
+      const dd = String(d.getDate()).padStart(2,'0');
+      return `${yyyy}-${mm}-${dd}`;
+    }
+
+    function buildAllowedDates() {
+      const base = new Date();
+      base.setHours(0,0,0,0);
+      const out = [];
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(base.getTime() + i*24*60*60*1000);
+        out.push({ dateStr: toDateStr(d), label: i===0 ? 'Today' : d.toLocaleDateString(undefined, { weekday:'short', month:'short', day:'numeric' }) });
+      }
+      return out;
+    }
+
+    function formatFloat(v) {
+      const n = Number(v);
+      if (Number.isNaN(n)) return '0';
+      return n.toFixed(2).replace(/\.?0+$/,'');
+    }
+
+    function lockedSlotCutoffForDate(dateStr) {
+      const now = new Date();
+      if (!dateStr || dateStr !== toDateStr(now)) return 0;
+      const mins = now.getHours() * 60 + now.getMinutes();
+      let nextQuarterMins = (Math.floor(mins / 15) + 1) * 15;
+      if (nextQuarterMins > 24 * 60) nextQuarterMins = 24 * 60;
+      return Math.min(96, Math.max(0, Math.floor(nextQuarterMins / 15)));
+    }
+
+    function slotIsLockedByClock(slotIdx, dateStr) {
+      const sid = Number(slotIdx) || 0;
+      return sid > 0 && sid <= lockedSlotCutoffForDate(dateStr);
+    }
+
+    /** Last slot index that uses locked (green) styling on today; includes optional forward buffer from settings. */
+    function effectiveVisualLockCutoff(dateStr) {
+      const lock = lockedSlotCutoffForDate(dateStr);
+      const nowStr = toDateStr(new Date());
+      if (!dateStr || dateStr !== nowStr) return lock;
+      const extra = Math.max(0, getTimeslotVariationCount());
+      return Math.min(96, lock + extra);
+    }
+
+    function slotLooksReadonlyGreen(slotIdx, dateStr) {
+      const sid = Number(slotIdx) || 0;
+      return sid > 0 && sid <= effectiveVisualLockCutoff(dateStr);
+    }
+
+    // Real-time clock lock only (used for supply rollups that must match elapsed time, not UI buffer).
+    function slotApprovedForDisplay(slotRow, dateStr) {
+      const idx = Number(slotRow && slotRow.slot_index) || 0;
+      return slotIsLockedByClock(idx, dateStr);
+    }
+
+    function slotAiForPlant(slotRow, plantName, dateStr) {
+      if (!slotRow || !plantName) return 0;
+      const key = String(plantName).trim().toLowerCase();
+      const source = slotRow.is_approved
+        ? (Array.isArray(slotRow.final_allocation) ? slotRow.final_allocation : [])
+        : (slotLooksReadonlyGreen(slotRow.slot_index, dateStr) ? (Array.isArray(slotRow.allocation_split) ? slotRow.allocation_split : []) : []);
+      let out = 0;
+      source.forEach((r) => {
+        const nm = String(r && r.plant ? r.plant : '').trim().toLowerCase();
+        if (nm === key) out += Number(r.mwh) || 0;
+      });
+      return out;
+    }
+
+    function previousRevisionMode(mode) {
+      if (mode === 'revision3') return 'revision2';
+      if (mode === 'revision2') return 'revision1';
+      if (mode === 'revision1') return 'submitted';
+      return mode;
+    }
+
+    function rowIsChangedVsPrevious(row, mode) {
+      if (!row || mode === 'submitted') return false;
+      const currentVal = Number(unallocatedForRevision(row, mode)) || 0;
+      const previousVal = Number(unallocatedForRevision(row, previousRevisionMode(mode))) || 0;
+      return Math.abs(currentVal - previousVal) >= 0.01;
+    }
+
+    function applyAiRowVisualState(slotIdx, row, isApproved, mode, dateStr) {
+      const tr = document.getElementById('aiSlotRecRow' + Number(slotIdx));
+      if (!tr) return;
+      tr.classList.remove('ai-slot-approved-row', 'ai-slot-revised-row');
+      const frozenUi = slotLooksReadonlyGreen(slotIdx, dateStr);
+      const pendingGen = isPendingGeneratorSupplySlot(slotIdx);
+      if (frozenUi && !pendingGen) {
+        tr.classList.add('ai-slot-approved-row');
+      } else {
+        tr.classList.add('ai-slot-revised-row');
+      }
+    }
+
+    function bindAiSlotApproveButtons(actionCell, slotIdx) {
+      const apBtn = actionCell.querySelector('.btnSlotApprove');
+      const ovBtn = actionCell.querySelector('.btnSlotOverride');
+      if (apBtn) apBtn.addEventListener('click', () => approveSlotAi(apBtn.getAttribute('data-slot-index')));
+      if (ovBtn) ovBtn.addEventListener('click', () => openSlotOverrideModal(ovBtn.getAttribute('data-slot-index')));
+    }
+
+    function bindGenSupplyActionButtons(actionCell) {
+      actionCell.querySelectorAll('.btnGenSupplyApprove').forEach((btn) => {
+        btn.addEventListener('click', () => resolveGeneratorSupplyRevision(btn.getAttribute('data-revision-id'), 'approve'));
+      });
+      actionCell.querySelectorAll('.btnGenSupplyOverride').forEach((btn) => {
+        btn.addEventListener('click', () => openGenSupplyOverrideModal(btn.getAttribute('data-revision-id')));
+      });
+    }
+
+    function refreshAiModalRealtimeState() {
+      const selectedDate = dateSelect && dateSelect.value ? dateSelect.value : '';
+      cachedSlotSavingsAnalysis.forEach((s) => {
+        const slotIdx = Number(s && s.slot_index);
+        if (!(slotIdx >= 1 && slotIdx <= 96)) return;
+        const tr = document.getElementById('aiSlotRecRow' + slotIdx);
+        if (!tr) return;
+        const frozenUi = slotLooksReadonlyGreen(slotIdx, selectedDate);
+        const pendingGen = isPendingGeneratorSupplySlot(slotIdx);
+        const aiApproved = s && s.is_approved === true;
+        tr.classList.toggle('ai-slot-approved-row', frozenUi && !pendingGen);
+        tr.classList.toggle('ai-slot-revised-row', !frozenUi || pendingGen);
+
+        const actionCell = document.querySelector('.aiSlotActionCell[data-slot-index="' + slotIdx + '"]');
+        if (!actionCell) return;
+        const sel = document.getElementById('aiSlotRevisionSelect' + slotIdx);
+        const dk = slotSupplyDefaultKey(s);
+
+        if (pendingGen && cachedSupplyRevisionMeta.pending_supply_revision) {
+          if (sel) {
+            sel.value = dk;
+            sel.disabled = false;
+          }
+          actionCell.innerHTML =
+            '<div class="d-flex flex-column align-items-start gap-1">' +
+            buildAiSlotActionInnerHtml(s, slotIdx, frozenUi, aiApproved) +
+            '</div>';
+          bindGenSupplyActionButtons(actionCell);
+          bindAiSlotApproveButtons(actionCell, slotIdx);
+          if (!aiApproved && !slotAutoApproveDeadlines[slotIdx]) startSlotAutoApproveTimer(slotIdx);
+          return;
+        }
+
+        if (frozenUi && !aiApproved) {
+          clearSlotAutoApprove(slotIdx);
+          if (sel) {
+            sel.value = dk;
+            sel.disabled = true;
+          }
+          actionCell.innerHTML =
+            '<div class="d-flex flex-column align-items-start gap-1">' +
+            buildAiSlotActionInnerHtml(s, slotIdx, frozenUi, aiApproved) +
+            '</div>';
+          return;
+        }
+
+        if (aiApproved) {
+          clearSlotAutoApprove(slotIdx);
+          if (sel) {
+            sel.value = slotSupplyDefaultKey(s);
+            sel.disabled = true;
+          }
+          actionCell.innerHTML =
+            '<div class="d-flex flex-column align-items-start gap-1">' +
+            buildAiSlotActionInnerHtml(s, slotIdx, frozenUi, aiApproved) +
+            '</div>';
+          return;
+        }
+
+        if (sel) {
+          sel.value = dk;
+          sel.disabled = false;
+        }
+        actionCell.innerHTML =
+          '<div class="d-flex flex-column align-items-start gap-1">' +
+          buildAiSlotActionInnerHtml(s, slotIdx, frozenUi, aiApproved) +
+          '</div>';
+        bindAiSlotApproveButtons(actionCell, slotIdx);
+        bindGenSupplyActionButtons(actionCell);
+        if (!slotAutoApproveDeadlines[slotIdx]) startSlotAutoApproveTimer(slotIdx);
+      });
+    }
+
+    function effectiveDefaultRevisionKey() {
+      return cachedSupplyRevisionMeta.default_key || 'revision2';
+    }
+
+    function normalizeStoredRevisionForSelect(stored) {
+      const dk = effectiveDefaultRevisionKey();
+      const labels = cachedSupplyRevisionMeta.labels || [];
+      const hasKey = (k) => labels.some((x) => x.key === k);
+      if (!stored || stored === 'revision2') return dk;
+      if (stored === 'revision1') return hasKey('upload_1') ? 'upload_1' : 'submitted';
+      if (stored === 'revision3') return hasKey('upload_3') ? 'upload_3' : dk;
+      if (String(stored).startsWith('upload_')) return stored;
+      return dk;
+    }
+
+    function formatApprovedRevisionLabel(code) {
+      const labels = cachedSupplyRevisionMeta.labels || [];
+      const hit = labels.find((x) => x.key === code);
+      if (hit) return hit.label;
+      if (!code || code === 'revision2') return 'Latest';
+      if (code === 'revision3') return 'Revision 3';
+      if (code === 'revision1') return 'Revision 1';
+      if (code === 'submitted') return 'Submitted';
+      const m = /^upload_(\d+)$/.exec(String(code || ''));
+      if (m) return 'Revision ' + m[1];
+      return String(code);
+    }
+
+    /** Same slot-wise revision transform as generator schedule / reports (steps 1–4). */
+    function applyRevisionStep(baseVal, slotIndex, revisionNo) {
+      const v = Number(baseVal) || 0;
+      const idx = parseInt(slotIndex, 10) || 0;
+      let pct;
+      let bias;
+      if (revisionNo === 1) {
+        pct = ((idx % 9) - 4) / 100;
+        bias = ((idx % 4) - 1.5) * 0.03;
+      } else if (revisionNo === 2) {
+        pct = ((idx % 11) - 5) / 90;
+        bias = ((idx % 5) - 2) * 0.04 + 0.05;
+      } else if (revisionNo === 3) {
+        pct = ((idx % 10) - 4.5) / 95;
+        bias = ((idx % 6) - 2.5) * 0.033 + 0.02;
+      } else {
+        pct = ((idx % 12) - 5.5) / 95;
+        bias = ((idx % 7) - 3) * 0.036 + 0.03;
+      }
+      const out = v * (1 + pct) + bias;
+      return Math.max(0, Number(out.toFixed(2)) || 0);
+    }
+
+    function unallocatedForRevision(slotRow, revisionMode) {
+      if (!slotRow) return 0;
+      const by = slotRow.unallocated_by_supply_revision;
+      const mode = revisionMode || effectiveDefaultRevisionKey();
+      if (by && typeof by === 'object' && Object.keys(by).length) {
+        if (Object.prototype.hasOwnProperty.call(by, mode)) {
+          return Number(by[mode]) || 0;
+        }
+        const dk = effectiveDefaultRevisionKey();
+        if (mode === 'revision2' && Object.prototype.hasOwnProperty.call(by, dk)) {
+          return Number(by[dk]) || 0;
+        }
+      }
+      const slotIndex = parseInt(slotRow.slot_index, 10) || 0;
+      const submittedUnallocated = Number(slotRow.unallocated_mwh) || 0;
+      if (mode === 'submitted') return submittedUnallocated;
+      if (mode === 'revision1') return applyRevisionStep(submittedUnallocated, slotIndex, 1);
+      const rev1 = applyRevisionStep(submittedUnallocated, slotIndex, 1);
+      if (mode === 'revision2') return applyRevisionStep(rev1, slotIndex, 2);
+      const rev2 = applyRevisionStep(rev1, slotIndex, 2);
+      if (mode === 'revision3') return applyRevisionStep(rev2, slotIndex, 3);
+      return applyRevisionStep(rev1, slotIndex, 2);
+    }
+
+    function aiRevisionSelectOptionsHtml(selected) {
+      const labels = cachedSupplyRevisionMeta.labels || [];
+      if (!labels.length) {
+        const opts = [
+          ['submitted', 'Submitted'],
+          ['revision1', 'Revision 1'],
+          ['revision2', 'Latest revision'],
+          ['revision3', 'Revision 3'],
+        ];
+        return opts
+          .map(([v, lab]) => '<option value="' + v + '"' + (v === selected ? ' selected' : '') + '>' + lab + '</option>')
+          .join('');
+      }
+      return labels
+        .map((item) => {
+          const v = item.key;
+          const lab = item.label || v;
+          return '<option value="' + v + '"' + (v === selected ? ' selected' : '') + '>' + lab + '</option>';
+        })
+        .join('');
+    }
+
+    function selectedRevisionForSlot(slotIdx) {
+      const sel = document.getElementById('aiSlotRevisionSelect' + slotIdx);
+      return sel ? sel.value : effectiveDefaultRevisionKey();
+    }
+
+    function inferSupplyRevisionKeyFromPools(entry) {
+      const by = entry && entry.unallocated_by_supply_revision ? entry.unallocated_by_supply_revision : null;
+      if (!by || typeof by !== 'object') return null;
+      const base = Number(by.submitted);
+      if (!Number.isFinite(base)) return null;
+      const uploadKeys = Object.keys(by)
+        .filter((k) => /^upload_\d+$/.test(k))
+        .sort((a, b) => parseInt(a.split('_')[1], 10) - parseInt(b.split('_')[1], 10));
+      let last = 'submitted';
+      uploadKeys.forEach((k) => {
+        const v = Number(by[k]);
+        if (!Number.isFinite(v)) return;
+        if (Math.abs(v - base) > 1e-9) last = k;
+      });
+      return last;
+    }
+
+    function slotSupplyDefaultKey(entry) {
+      const inferred = inferSupplyRevisionKeyFromPools(entry);
+      const tagged =
+        entry && entry.supply_default_revision_key != null && entry.supply_default_revision_key !== ''
+          ? String(entry.supply_default_revision_key)
+          : null;
+      if (tagged && inferred && tagged.startsWith('upload_') && inferred === 'submitted') {
+        return 'submitted';
+      }
+      if (tagged) return tagged;
+      if (inferred != null) return inferred;
+      return effectiveDefaultRevisionKey();
+    }
+
+    function isPendingGeneratorSupplySlot(slotIdx) {
+      const p = cachedSupplyRevisionMeta.pending_supply_revision;
+      if (!p || !Array.isArray(p.changed_slot_indices)) return false;
+      return p.changed_slot_indices.indexOf(Number(slotIdx)) >= 0;
+    }
+
+    function formatGenCmCountdown(sec) {
+      const s = parseInt(sec, 10) || 0;
+      if (s <= 0) return '0s';
+      const m = Math.floor(s / 60);
+      const r = s % 60;
+      if (m >= 60) {
+        const h = Math.floor(m / 60);
+        const mm = m % 60;
+        return h + 'h ' + mm + 'm';
+      }
+      if (m > 0) return m + 'm ' + r + 's';
+      return r + 's';
+    }
+
+    function buildAiSlotActionInnerHtml(s, slotIdx, frozenUi, aiApproved) {
+      const pendingGen = isPendingGeneratorSupplySlot(slotIdx);
+      const p = cachedSupplyRevisionMeta.pending_supply_revision;
+      if (pendingGen && p) {
+        const genRemain = formatGenCmCountdown(p.seconds_remaining);
+        let html =
+          '<span class="badge bg-warning text-dark" style="font-size:0.72rem;">Generator Rev ' +
+          p.revision_number +
+          ' — pending CM</span>' +
+          '<button type="button" class="btn btn-success btn-sm btnGenSupplyApprove" data-revision-id="' +
+          p.id +
+          '">Approve supply</button>' +
+          '<button type="button" class="btn btn-outline-primary btn-sm btnGenSupplyOverride" data-revision-id="' +
+          p.id +
+          '">Override supply…</button>' +
+          '<span class="text-muted" style="font-size:0.75rem;">Auto-approve in ' +
+          genRemain +
+          '</span>';
+        if (!aiApproved) {
+          html +=
+            '<hr class="my-1 w-100 border-secondary"/>' +
+            '<span class="text-muted" style="font-size:0.72rem;">AI allocation</span>' +
+            '<button type="button" class="btn btn-primary btn-sm btnSlotApprove" data-slot-index="' +
+            slotIdx +
+            '">Approve</button>' +
+            '<button type="button" class="btn btn-outline-secondary btn-sm btnSlotOverride mt-1" data-slot-index="' +
+            slotIdx +
+            '">Override</button>' +
+            '<div class="small text-muted mt-1" id="autoApproveTimer' +
+            slotIdx +
+            '"></div>';
+        }
+        return html;
+      }
+      if (frozenUi && !aiApproved) {
+        return '<span class="text-muted" style="font-size:0.8em;">Time locked</span>';
+      }
+      if (aiApproved) {
+        return '<span class="text-success" style="font-size:0.8em;">Approved</span>';
+      }
+      return (
+        '<button type="button" class="btn btn-primary btn-sm btnSlotApprove" data-slot-index="' +
+        slotIdx +
+        '">Approve</button>' +
+        '<button type="button" class="btn btn-outline-secondary btn-sm btnSlotOverride mt-1" data-slot-index="' +
+        slotIdx +
+        '">Override</button>' +
+        '<div class="small text-muted mt-1" id="autoApproveTimer' +
+        slotIdx +
+        '"></div>'
+      );
+    }
+
+    /** Base (55% portion) + AI approved allocation — matches backend plant totals. */
+    function finalSupplyMwh(p) {
+      const b = Number(p.base_total_mwh) || 0;
+      const ai = Number(p.ai_final_total_mwh) || 0;
+      return b + ai;
+    }
+
+    /**
+     * Real-time approved supply:
+     * Sum only slots explicitly approved in slot_savings_analysis.
+     * For each approved slot: base_per_slot + approved_ai_for_that_plant.
+     * No current-time auto-addition; future/unapproved slots are excluded.
+     */
+    function approvedSlotsFinalSupplyMwh(plant) {
+      if (!plant) return 0;
+      const basePerSlot = (Number(plant.base_total_mwh) || 0) / 96;
+      const plantNameKey = String(plant.plant_name || '').trim().toLowerCase();
+      const selectedDate = dateSelect && dateSelect.value ? dateSelect.value : '';
+      let total = 0;
+      (cachedSlotSavingsAnalysis || []).forEach((s) => {
+        if (!s || !slotApprovedForDisplay(s, selectedDate)) return;
+        const aiForPlant = slotAiForPlant(s, plantNameKey, selectedDate);
+        total += basePerSlot + aiForPlant;
+      });
+      return total;
+    }
+
+    function demandMinusFinalSupplyMwh(p, finalSupplyOverride) {
+      const d = Number(p.demand_total_mwh) || 0;
+      const f = finalSupplyOverride != null ? (Number(finalSupplyOverride) || 0) : finalSupplyMwh(p);
+      return d - f;
+    }
+
+    function tableColspan() {
+      return cachedRunStatus === 'APPROVED' ? 7 : 5;
+    }
+
+    function setPlantsTableHeader() {
+      const thead = document.getElementById('plantsThead');
+      const approved = cachedRunStatus === 'APPROVED';
+      if (approved) {
+        thead.innerHTML = `
+          <tr>
+            <th>Sl. No.</th>
+            <th>Plant name</th>
+            <th>Total demand (MWh)</th>
+            <th>Base supply (MWh)</th>
+            <th>Final supply (MWh)</th>
+            <th>Grid utilization (MWh)</th>
+            <th class="text-end">Action</th>
+          </tr>`;
+      } else {
+        thead.innerHTML = `
+          <tr>
+            <th>Sl. No.</th>
+            <th>Plant name</th>
+            <th>Total demand (MWh)</th>
+            <th>Base supply (MWh)</th>
+            <th class="text-end">Action</th>
+          </tr>`;
+      }
+    }
+
+    const dateSelect = document.getElementById('dateSelect');
+    const tbody = document.getElementById('plantsTbody');
+    const statusMsg = document.getElementById('statusMsg');
+    let cachedPlants = [];
+    let cachedRunStatus = null;
+    let cachedSlotSavingsAnalysis = [];
+    let cachedPlantSlotAllocations = [];
+    let cachedConsumerId = null;
+    let cachedSlotRows = [];
+    let cachedSupplyRevisionMeta = { labels: [], default_key: 'revision2', pending_supply_revision: null };
+    let genSupplyOverrideRevisionId = null;
+    let slotOverrideTargetIndex = null;
+    let slotOverrideTotalAllowed = 0;
+    const AUTO_APPROVE_WAIT_MS = 15 * 60 * 1000;
+    const slotAutoApproveDeadlines = {};
+    const slotAutoApproveIntervals = {};
+    let aiModalRealtimeTicker = null;
+
+    function getInputs() {
+      return document.querySelectorAll('.plant-input');
+    }
+
+    function formatCountdown(ms) {
+      const totalSec = Math.max(0, Math.ceil(ms / 1000));
+      const mm = String(Math.floor(totalSec / 60)).padStart(2, '0');
+      const ss = String(totalSec % 60).padStart(2, '0');
+      return mm + ':' + ss;
+    }
+
+    function clearSlotAutoApprove(slotIdx) {
+      const sid = Number(slotIdx);
+      if (slotAutoApproveIntervals[sid]) {
+        clearInterval(slotAutoApproveIntervals[sid]);
+        delete slotAutoApproveIntervals[sid];
+      }
+      delete slotAutoApproveDeadlines[sid];
+      const el = document.getElementById('autoApproveTimer' + sid);
+      if (el) el.textContent = '';
+    }
+
+    function setAutoApproveTimerText(slotIdx, text) {
+      const el = document.getElementById('autoApproveTimer' + Number(slotIdx));
+      if (el) el.textContent = text || '';
+    }
+
+    function startSlotAutoApproveTimer(slotIdx) {
+      const sid = Number(slotIdx);
+      if (!(sid >= 1 && sid <= 96)) return;
+      clearSlotAutoApprove(sid);
+      const deadline = Date.now() + AUTO_APPROVE_WAIT_MS;
+      slotAutoApproveDeadlines[sid] = deadline;
+
+      function tick() {
+        const remain = deadline - Date.now();
+        if (remain <= 0) {
+          clearSlotAutoApprove(sid);
+          setAutoApproveTimerText(sid, 'Auto-approving...');
+          approveSlotAi(sid, true);
+          return;
+        }
+        setAutoApproveTimerText(sid, 'Auto-approve in ' + formatCountdown(remain));
+      }
+
+      tick();
+      slotAutoApproveIntervals[sid] = setInterval(tick, 1000);
+    }
+
+    function reviveSlotAutoApproveTimers() {
+      Object.keys(slotAutoApproveDeadlines).forEach((k) => {
+        const sid = Number(k);
+        if (!slotAutoApproveDeadlines[sid]) return;
+        if (slotAutoApproveIntervals[sid]) return;
+        const deadline = slotAutoApproveDeadlines[sid];
+        function tick() {
+          const remain = deadline - Date.now();
+          if (remain <= 0) {
+            clearSlotAutoApprove(sid);
+            setAutoApproveTimerText(sid, 'Auto-approving...');
+            approveSlotAi(sid, true);
+            return;
+          }
+          setAutoApproveTimerText(sid, 'Auto-approve in ' + formatCountdown(remain));
+        }
+        tick();
+        slotAutoApproveIntervals[sid] = setInterval(tick, 1000);
+      });
+    }
+
+    function updateTotalDisplay() {
+      const inputs = Array.from(getInputs());
+      let total = 0;
+      inputs.forEach(inp => {
+        total += parseFloat(inp.value) || 0;
+      });
+      const el = document.getElementById('currentTotal');
+      if (el) el.innerText = total.toFixed(2);
+    }
+
+    function handleAutoAdjust(e) {
+      const changedInput = e.target;
+      if (!changedInput || !changedInput.classList || !changedInput.classList.contains('plant-input')) return;
+      if (slotOverrideTargetIndex == null) return;
+
+      const TOTAL_ALLOWED = Number(slotOverrideTotalAllowed) || 0;
+      const inputs = Array.from(getInputs());
+      if (!inputs.length) return;
+
+      let changedValue = parseFloat(changedInput.value) || 0;
+      if (changedValue < 0) changedValue = 0;
+      // Normalize to 2 decimals to match step=0.01.
+      changedValue = Math.round(changedValue * 100) / 100;
+
+      // Cap to TOTAL_ALLOWED
+      if (changedValue > TOTAL_ALLOWED) changedValue = TOTAL_ALLOWED;
+      changedInput.value = changedValue.toFixed(2);
+
+      const remaining = TOTAL_ALLOWED - changedValue;
+      const otherInputs = inputs.filter(inp => inp !== changedInput);
+
+      if (otherInputs.length === 0) {
+        changedInput.value = TOTAL_ALLOWED.toFixed(2);
+        updateTotalDisplay();
+        return;
+      }
+
+      // Simple distribution: assign all remaining to the first other plant; rest = 0
+      otherInputs.forEach((inp, index) => {
+        if (index === 0) inp.value = remaining.toFixed(2);
+        else inp.value = '0.00';
+      });
+
+      updateTotalDisplay();
+    }
+
+    function attachAutoAdjust() {
+      const inputs = document.querySelectorAll('.plant-input');
+      inputs.forEach(input => {
+        input.addEventListener('blur', handleAutoAdjust);
+      });
+    }
+
+    function setStatus(msg, ok = true) {
+      statusMsg.textContent = msg || '';
+      statusMsg.classList.remove('text-muted', 'text-success', 'text-danger');
+      if (!msg) statusMsg.classList.add('text-muted');
+      else statusMsg.classList.add(ok ? 'text-success' : 'text-danger');
+    }
+
+    async function fetchWithTimeout(url, options, timeoutMs) {
+      const req = fetchWithAuth(url, options);
+      let timeoutId;
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new Error('Request timed out. Please retry.'));
+        }, timeoutMs);
+      });
+      try {
+        return await Promise.race([req, timeoutPromise]);
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    }
+
+    function slotIndexToTimeBlock(slotIndex) {
+      const startMins = (slotIndex - 1) * 15;
+      const endMins = slotIndex * 15;
+      const fmt = (m) => {
+        if (m >= 1440) return '24:00';
+        const h = Math.floor(m / 60);
+        const min = m % 60;
+        return String(h).padStart(2, '0') + ':' + String(min).padStart(2, '0');
+      };
+      return fmt(startMins) + ' - ' + fmt(endMins);
+    }
+
+    function openViewModal(plant) {
+      const modal = document.getElementById('viewModal');
+      const title = document.getElementById('viewModalTitle');
+      const body = document.getElementById('viewModalBody');
+      title.textContent = (plant.plant_name || 'Plant') + ' – Slot-wise allocation';
+      const plantSupply = Number(plant.base_total_mwh) || 0;
+      const allocationWithLossPerSlot = plantSupply / 96;
+      const statePct = Number(plant.state_transition_loss_percent) || 0;
+      const centralPct = Number(plant.central_transmission_loss_percent) || 0;
+      const totalLossPct = statePct + centralPct;
+      const allocationWithoutLossPerSlot = allocationWithLossPerSlot * (1 - totalLossPct / 100);
+
+      let tableHtml = `
+        <p class="text-muted small mb-3"><strong>Total supply:</strong> ${formatFloat(plantSupply)} MWh &nbsp;|&nbsp; <strong>State loss:</strong> ${formatFloat(statePct)}% &nbsp;|&nbsp; <strong>Central loss:</strong> ${formatFloat(centralPct)}%</p>
+        <div class="kai-edit-slots-wrap kai-pw-tall table-responsive">
+          <table class="table table-striped table-hover align-middle kai-edit-slots-table mb-0">
+            <thead>
+              <tr>
+                <th style="width:60px;">Sl. No.</th>
+                <th>Time slot</th>
+                <th>Allocation with loss (MWh)</th>
+                <th>State Transmission Loss (%)</th>
+                <th>Central Transmission Loss (%)</th>
+                <th>Allocation without loss (MWh)</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+      for (let i = 1; i <= 96; i++) {
+        tableHtml += `
+              <tr>
+                <td>${i}</td>
+                <td>${slotIndexToTimeBlock(i)}</td>
+                <td>${formatFloat(allocationWithLossPerSlot)}</td>
+                <td>${formatFloat(statePct)}</td>
+                <td>${formatFloat(centralPct)}</td>
+                <td>${formatFloat(allocationWithoutLossPerSlot)}</td>
+              </tr>
+        `;
+      }
+      tableHtml += `
+            </tbody>
+          </table>
+        </div>
+      `;
+      body.innerHTML = tableHtml;
+      modal.style.display = 'flex';
+    }
+
+    function closeViewModal() {
+      document.getElementById('viewModal').style.display = 'none';
+    }
+
+    function openAiAllocModal(plant) {
+      const modal = document.getElementById('aiAllocModal');
+      const title = document.getElementById('aiAllocModalTitle');
+      const body = document.getElementById('aiAllocModalBody');
+      const selectedDate = dateSelect && dateSelect.value ? dateSelect.value : '';
+      const plantName = plant && plant.plant_name ? plant.plant_name : 'Plant';
+      title.textContent = plantName + ' – Approved AI allocations (slot-wise)';
+
+      const approvedRows = (cachedSlotSavingsAnalysis || [])
+        .filter((s) => slotApprovedForDisplay(s, selectedDate))
+        .map((s) => {
+          const ai = slotAiForPlant(s, plantName, selectedDate);
+          return {
+            slot_index: Number(s.slot_index) || 0,
+            time_block: s.time_block || slotIndexToTimeBlock(Number(s.slot_index) || 0),
+            ai_mwh: ai,
+            status: 'Approved',
+          };
+        })
+        .filter((r) => r.slot_index >= 1 && r.slot_index <= 96);
+
+      let html = `
+        <p class="text-muted small mb-3">
+          Showing only <strong>approved/time-locked slots</strong> for this day. AI values are the approved split from the unallocated pool for each slot.
+        </p>
+        <p class="text-muted small mb-3">
+          Complete 96 slots data will be shared once approved.
+        </p>
+        <div class="kai-edit-slots-wrap kai-pw-tall table-responsive">
+          <table class="table table-striped table-hover align-middle kai-edit-slots-table mb-0">
+            <thead>
+              <tr>
+                <th style="width:72px;">Slot</th>
+                <th style="min-width:130px;">Time slot</th>
+                <th style="min-width:120px;">Status</th>
+                <th style="min-width:150px;">Approved AI from unallocated (MWh)</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+      if (!approvedRows.length) {
+        html += '<tr><td colspan="4" class="text-muted py-3">No approved/time-locked slot values found for this plant.</td></tr>';
+      } else {
+        approvedRows.forEach((r) => {
+          html += `
+            <tr>
+              <td>${r.slot_index}</td>
+              <td>${r.time_block}</td>
+              <td>${r.status}</td>
+              <td>${formatFloat(r.ai_mwh)}</td>
+            </tr>
+          `;
+        });
+      }
+      html += '</tbody></table></div>';
+      body.innerHTML = html;
+      modal.style.display = 'flex';
+    }
+
+    function closeAiAllocModal() {
+      document.getElementById('aiAllocModal').style.display = 'none';
+    }
+
+    function getPlantSlotAllocationEntry(plant) {
+      return cachedPlantSlotAllocations.find(e => Number(e.plant_id) === Number(plant.plant_id));
+    }
+
+    function closeDayAllocModal() {
+      document.getElementById('dayAllocModal').style.display = 'none';
+    }
+
+    function openDayAllocationModal(withLoss = true) {
+      const modal = document.getElementById('dayAllocModal');
+      const title = document.getElementById('dayAllocModalTitle');
+      const body = document.getElementById('dayAllocModalBody');
+
+      const plantCols = (cachedPlants || []).map(p => ({
+        plant_id: p.plant_id,
+        name: p.plant_name || ('Plant ' + p.plant_id),
+        loss_pct: (Number(p.state_transition_loss_percent) || 0) + (Number(p.central_transmission_loss_percent) || 0),
+      }));
+
+      title.textContent = withLoss
+        ? 'Approved allocation (96 slots) — With transmission loss (gross)'
+        : 'Approved allocation (96 slots) — Without transmission loss (net at plant)';
+
+      // Build lookups:
+      // - baseAvgByPlant[plant_id] = base MWh per slot (matches the "View base allocation" screen: base_total_mwh / 96)
+      // - approvedByPlantSlot[plant_id][slot_index] = approved slot allocation (from slot_savings_analysis.final_allocation)
+      const baseGrossAvgByPlant = {};
+      const baseNetAvgByPlant = {};
+      const approvedByPlantSlot = {};
+
+      const plantIdByName = {};
+      plantCols.forEach(p => {
+        plantIdByName[String(p.name || '').trim().toLowerCase()] = Number(p.plant_id);
+      });
+
+      (cachedPlants || []).forEach(p => {
+        const pid = Number(p.plant_id);
+        const tot = Number(p.base_total_mwh) || 0;
+        const baseGross = tot / 96;
+        const lossPct = plantCols.find(x => Number(x.plant_id) === pid)?.loss_pct || 0;
+        baseGrossAvgByPlant[pid] = baseGross;
+        baseNetAvgByPlant[pid] = baseGross * (1 - (lossPct || 0) / 100);
+      });
+
+      const savingsBySlotIndex = {};
+      (cachedSlotSavingsAnalysis || []).forEach((e) => {
+        const k = Number(e && e.slot_index);
+        if (k >= 1 && k <= 96) savingsBySlotIndex[k] = e;
+      });
+      const selectedDate = dateSelect && dateSelect.value ? dateSelect.value : '';
+
+      (cachedSlotSavingsAnalysis || []).forEach(entry => {
+        const si = Number(entry && entry.slot_index);
+        if (!(si >= 1 && si <= 96)) return;
+        let src = [];
+        if (entry.is_approved) {
+          src = Array.isArray(entry.final_allocation) ? entry.final_allocation : [];
+        } else {
+          src = Array.isArray(entry.allocation_split) ? entry.allocation_split : [];
+        }
+        src.forEach(it => {
+          const nm = String(it.plant || '').trim().toLowerCase();
+          const pid = plantIdByName[nm];
+          if (!pid) return;
+          approvedByPlantSlot[pid] = approvedByPlantSlot[pid] || {};
+          approvedByPlantSlot[pid][si] = (approvedByPlantSlot[pid][si] || 0) + (Number(it.mwh) || 0);
+        });
+      });
+
+      let tableHtml = `
+        <p class="text-muted small mb-3">
+          Each cell is <strong>base</strong> + <strong>slot AI</strong>: for approved slots that is the saved Consumer Manager approval; for slots not yet approved it uses the model suggestion until you approve that slot.
+          ${withLoss ? 'Shown as gross MWh per slot.' : 'Shown as net at plant after subtracting each plant transmission loss %.'}
+        </p>
+        <p class="text-muted small mb-3">Color code: <span class="text-success fw-semibold">green</span> = locked for display (time + optional buffer from Settings), <span class="text-warning fw-semibold">yellow</span> = revised/pending slot.</p>
+        <div class="kai-edit-slots-wrap kai-pw-tall table-responsive">
+          <table class="table table-striped table-hover align-middle kai-edit-slots-table mb-0">
+            <thead>
+              <tr>
+                <th style="width:56px;">Sl. No.</th>
+                <th style="width:90px;">Hour</th>
+                <th style="min-width:130px;">Time slot</th>
+                <th style="min-width:100px;">Revision</th>
+      `;
+      plantCols.forEach(p => {
+        const lbl = withLoss ? p.name : (p.name + ' (−' + formatFloat(p.loss_pct) + '%)');
+        tableHtml += `<th style="min-width:120px;">${lbl}</th>`;
+      });
+      tableHtml += `
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      for (let si = 1; si <= 96; si++) {
+        const hr = Math.floor((si - 1) / 4) + 1;
+        const revEntry = savingsBySlotIndex[si];
+        const revCell = revEntry && revEntry.is_approved
+          ? formatApprovedRevisionLabel(slotSupplyDefaultKey(revEntry))
+          : '—';
+        const approvedOrLocked = slotLooksReadonlyGreen(si, selectedDate);
+        const rowClass = approvedOrLocked ? 'ai-slot-approved-row' : 'ai-slot-revised-row';
+        tableHtml += `<tr class="${rowClass}"><td>${si}</td><td>H${hr}</td><td>${slotIndexToTimeBlock(si)}</td><td>${revCell}</td>`;
+        plantCols.forEach(p => {
+          const pid = Number(p.plant_id);
+          const appr = (approvedByPlantSlot[pid] && approvedByPlantSlot[pid][si]) ? approvedByPlantSlot[pid][si] : 0;
+          const lossPct = (p.loss_pct || 0);
+
+          if (withLoss) {
+            // Gross table: base(gross) + approved AI(gross)
+            const baseGross = baseGrossAvgByPlant[pid] || 0;
+            const totalGross = baseGross + appr;
+            tableHtml += `<td>${formatFloat(totalGross)}</td>`;
+          } else {
+            // Net table: base(net) + approved AI(net). Show AI transmission loss explicitly.
+            const baseNet = baseNetAvgByPlant[pid] || 0;
+            const aiLoss = appr * (lossPct / 100);
+            const aiNet = appr - aiLoss;
+            const totalNet = baseNet + aiNet;
+            tableHtml += `<td><div>${formatFloat(totalNet)}</div><div class="text-muted" style="font-size:0.78em;">Tx loss: ${formatFloat(aiLoss)}</div></td>`;
+          }
+        });
+        tableHtml += `</tr>`;
+      }
+
+      tableHtml += `
+            </tbody>
+          </table>
+        </div>
+      `;
+
+      body.innerHTML = tableHtml;
+      modal.style.display = 'flex';
+    }
+
+    function openTransmissionLossModal(plant) {
+      const modal = document.getElementById('txLossModal');
+      const title = document.getElementById('txLossModalTitle');
+      const body = document.getElementById('txLossModalBody');
+      const entry = getPlantSlotAllocationEntry(plant);
+      const slots = entry && entry.slots ? entry.slots : [];
+      const statePct = Number(plant.state_transition_loss_percent) || 0;
+      const centralPct = Number(plant.central_transmission_loss_percent) || 0;
+      const L = statePct + centralPct;
+      title.textContent = (plant.plant_name || 'Plant') + ' – Final allocation (96 slots) with transmission loss';
+
+      let tableHtml = `
+        <p class="text-muted small mb-3">
+          Per-slot values use <strong>approved</strong> allocation (base + AI). Combined loss for net at plant:
+          state <strong>${formatFloat(statePct)}%</strong> + central <strong>${formatFloat(centralPct)}%</strong> = <strong>${formatFloat(L)}%</strong>.
+          Net at plant (MWh) = final gross × (1 − ${formatFloat(L)}% / 100). Transmission loss (MWh) = final gross − net at plant (= final gross × ${formatFloat(L)}% / 100).
+        </p>
+        <div class="kai-edit-slots-wrap kai-pw-tall table-responsive">
+          <table class="table table-striped table-hover align-middle kai-edit-slots-table mb-0">
+            <thead>
+              <tr>
+                <th style="width:56px;">Sl. No.</th>
+                <th>Time slot</th>
+                <th>Base (MWh)</th>
+                <th>AI (MWh)</th>
+                <th>Final gross (MWh)</th>
+                <th>Net at plant (MWh)</th>
+                <th>Transmission loss (MWh)</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+      if (!slots.length) {
+        tableHtml += '<tr><td colspan="7" class="text-muted">No slot-level allocation data.</td></tr>';
+      } else {
+        slots.forEach((row, i) => {
+          const si = Number(row.slot_index) || (i + 1);
+          const gross = Number(row.final_gross_mwh) || 0;
+          const netAtPlant = gross * (1 - L / 100);
+          const txLoss = gross - netAtPlant;
+          tableHtml += `
+              <tr>
+                <td>${i + 1}</td>
+                <td>${slotIndexToTimeBlock(si)}</td>
+                <td>${formatFloat(row.base_mwh)}</td>
+                <td>${formatFloat(row.ai_mwh)}</td>
+                <td>${formatFloat(gross)}</td>
+                <td>${formatFloat(netAtPlant)}</td>
+                <td>${formatFloat(txLoss)}</td>
+              </tr>`;
+        });
+      }
+      tableHtml += `
+            </tbody>
+          </table>
+        </div>
+      `;
+      body.innerHTML = tableHtml;
+      modal.style.display = 'flex';
+    }
+
+    function closeTxLossModal() {
+      document.getElementById('txLossModal').style.display = 'none';
+    }
+
+    function formatRsIn(n) {
+      const x = Number(n) || 0;
+      return x.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+    }
+
+    function formatRsPerMwh(n) {
+      if (n == null || n === '') return '—';
+      const x = Number(n);
+      if (Number.isNaN(x)) return '—';
+      return '₹' + x.toLocaleString('en-IN', { maximumFractionDigits: 2, minimumFractionDigits: 0 }) + '/MWh';
+    }
+
+    function slotAllocationSavingsCell(s) {
+      const path = Number(s.total_path_savings_rs);
+      if (s.total_path_savings_rs != null && s.total_path_savings_rs !== '' && !Number.isNaN(path)) {
+        if (path <= 0) return '—';
+        return '₹' + formatRsIn(path);
+      }
+      const allocSav = Number(s.allocation_savings != null ? s.allocation_savings : s.best_allocate_savings_rs) || 0;
+      if (allocSav <= 0) return '—';
+      return '₹' + formatRsIn(allocSav);
+    }
+
+    function slotIexSavingsCell(s) {
+      const sellRem = Number(s.sell_remainder_mwh);
+      if (s.best_option === 'allocate' && !Number.isNaN(sellRem) && sellRem < 1e-4) {
+        return '—';
+      }
+      const iexSav = Number(s.iex_savings != null ? s.iex_savings : s.sell_savings_rs) || 0;
+      return '₹' + formatRsIn(iexSav);
+    }
+
+    function escapeHtml(str) {
+      if (str == null) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function slotRecommendationHtml(s, sellRevisionMode) {
+      const sellRev = sellRevisionMode || 'revision2';
+      if (s.is_approved) {
+        const fa = Array.isArray(s.final_allocation) ? s.final_allocation : [];
+        const iex = Number(s.iex_allocation_mwh) || 0;
+        const lines = [];
+        fa.forEach((p) => {
+          lines.push(escapeHtml(String(p.plant || '')) + ': ' + formatFloat(p.mwh) + ' MWh');
+        });
+        if (iex > 1e-6) {
+          lines.push('IEX: ' + formatFloat(iex) + ' MWh');
+        }
+        if (lines.length) {
+          return 'Approved:<br>' + lines.join('<br>');
+        }
+        return 'Approved: full AI pool on IEX';
+      }
+      const split = Array.isArray(s.allocation_split) ? s.allocation_split : [];
+      if (s.best_option === 'allocate') {
+        if (split.length) {
+          const lines = split.map(p => escapeHtml(String(p.plant || '')) + ': ' + formatFloat(p.mwh) + ' MWh').join('<br>');
+          return 'Recommend:<br>' + lines;
+        }
+        return s.recommendation || '—';
+      }
+      return 'Sell ' + formatFloat(unallocatedForRevision(s, sellRev)) + ' MWh on IEX';
+    }
+
+    function openSlotRecSummaryModal(slotIdx) {
+      const s = cachedSlotSavingsAnalysis.find(x => Number(x.slot_index) === Number(slotIdx));
+      if (!s) return;
+      const title = document.getElementById('slotRecSummaryModalTitle');
+      const body = document.getElementById('slotRecSummaryModalBody');
+      const tb = s.time_block || slotIndexToTimeBlock(slotIdx);
+      title.textContent = 'Slot ' + slotIdx + ' — ' + tb;
+
+      const unalloc = formatFloat(unallocatedForRevision(s, selectedRevisionForSlot(slotIdx)));
+      const iexSav = slotIexSavingsCell(s);
+      const allocSav = slotAllocationSavingsCell(s);
+      const best = s.is_approved
+        ? 'Saved — see split below'
+        : (s.best_option === 'allocate' ? 'Allocate to plant(s)' : 'Sell on IEX');
+      let splitLabel = 'Suggested split';
+      let splitRows = '';
+      if (s.is_approved) {
+        splitLabel = 'Approved split (saved)';
+        const fa = Array.isArray(s.final_allocation) ? s.final_allocation : [];
+        const iexAmt = Number(s.iex_allocation_mwh) || 0;
+        fa.forEach((p) => {
+          splitRows += '<tr><td>' + escapeHtml(String(p.plant || '')) + '</td><td class="text-end">' + formatFloat(p.mwh) + ' MWh</td></tr>';
+        });
+        if (iexAmt > 1e-6) {
+          splitRows += '<tr><td>IEX</td><td class="text-end">' + formatFloat(iexAmt) + ' MWh</td></tr>';
+        }
+      } else {
+        const split = Array.isArray(s.allocation_split) ? s.allocation_split : [];
+        split.forEach((p) => {
+          splitRows += '<tr><td>' + escapeHtml(String(p.plant || '')) + '</td><td class="text-end">' + formatFloat(p.mwh) + ' MWh</td></tr>';
+        });
+      }
+      const plants = Array.isArray(s.plant_savings) ? s.plant_savings : [];
+      let plantRows = '';
+      plants.forEach((p) => {
+        const sav = Number(p.savings_rs) || 0;
+        const margin = formatRsPerMwh(p.margin_rs_per_mwh);
+        const vsIex = formatRsPerMwh(p.margin_vs_iex_rs_per_mwh);
+        const head =
+          p.remaining_headroom_mwh != null && p.remaining_headroom_mwh !== ''
+            ? formatFloat(p.remaining_headroom_mwh)
+            : '—';
+        plantRows +=
+          '<tr><td>' +
+          escapeHtml(p.plant_name || '') +
+          '</td><td class="small text-end">' +
+          margin +
+          '</td><td class="small text-end">' +
+          vsIex +
+          '</td><td class="text-end">' +
+          head +
+          '</td><td class="text-end">₹' +
+          formatRsIn(sav) +
+          '</td></tr>';
+      });
+
+      const recFull = s.recommendation ? escapeHtml(s.recommendation) : '—';
+      const mcpCell = s.mcp_rs_per_mwh != null && s.mcp_rs_per_mwh !== '' ? formatRsPerMwh(s.mcp_rs_per_mwh) : '—';
+      const iexNetCell =
+        s.iex_net_rs_per_mwh != null && s.iex_net_rs_per_mwh !== ''
+          ? formatRsPerMwh(s.iex_net_rs_per_mwh)
+          : '—';
+
+      body.innerHTML = `
+        <div class="mb-3">
+          <div class="row g-3 small">
+            <div class="col-6 col-md-6"><span class="text-muted d-block">Unallocated (MWh)</span><div class="fw-semibold">${unalloc}</div></div>
+            <div class="col-6 col-md-6"><span class="text-muted d-block">Recommended path</span><div class="fw-semibold">${escapeHtml(best)}</div></div>
+            <div class="col-6 col-md-6"><span class="text-muted d-block">IEX savings (sell all)</span><div class="fw-semibold">${iexSav}</div></div>
+            <div class="col-6 col-md-6"><span class="text-muted d-block">Allocation savings (plants)</span><div class="fw-semibold">${allocSav}</div></div>
+            <div class="col-6 col-md-6"><span class="text-muted d-block">MCP (this slot)</span><div class="fw-semibold">${mcpCell}</div></div>
+            <div class="col-6 col-md-6"><span class="text-muted d-block">IEX net (MCP − contract)</span><div class="fw-semibold">${iexNetCell}</div></div>
+          </div>
+          ${splitRows ? `
+          <div class="mt-3">
+            <div class="text-muted text-uppercase fw-semibold mb-2" style="font-size:0.7rem;letter-spacing:0.06em">${splitLabel}</div>
+            <div class="table-responsive">
+            <table class="table table-sm table-bordered mb-0">
+              <thead class="table-light"><tr><th>Plant</th><th>MWh</th></tr></thead>
+              <tbody>${splitRows}</tbody>
+            </table>
+            </div>
+          </div>` : ''}
+          ${plants.length ? `
+          <div class="mt-3">
+            <div class="text-muted text-uppercase fw-semibold mb-1" style="font-size:0.7rem;letter-spacing:0.06em">Plant comparison (this slot)</div>
+            <p class="text-muted small mb-2">Margin = grid−RE spread (₹/MWh). vs IEX = that spread minus IEX net — positive favors the plant over IEX for that MWh. Headroom = demand minus base (cap on AI for this slot).</p>
+            <div class="table-responsive">
+            <table class="table table-sm table-bordered mb-0" style="min-width:520px">
+              <thead class="table-light"><tr><th>Plant</th><th>Margin</th><th>vs IEX</th><th>Headroom (MWh)</th><th>Savings (₹)</th></tr></thead>
+              <tbody>${plantRows}</tbody>
+            </table>
+            </div>
+          </div>` : ''}
+          <div class="mt-3">
+            <div class="text-muted text-uppercase fw-semibold mb-1" style="font-size:0.7rem;letter-spacing:0.06em">Full recommendation</div>
+            <p class="small mb-0 p-3 bg-light border rounded text-break" style="white-space:pre-wrap">${recFull}</p>
+          </div>
+        </div>
+      `;
+      document.getElementById('slotRecSummaryModal').style.display = 'flex';
+    }
+
+    function closeSlotRecSummaryModal() {
+      document.getElementById('slotRecSummaryModal').style.display = 'none';
+    }
+
+    function totalSupplyMwhForSlot(slotIdx) {
+      const r = cachedSlotRows.find(x => Number(x.slot_index) === Number(slotIdx));
+      return r ? Number(r.allocated_mwh) || 0 : 0;
+    }
+
+    function defaultMwhFromSplit(slotRow, plantId) {
+      const p = (cachedPlants || []).find(x => Number(x.plant_id) === Number(plantId));
+      const name = p ? String(p.plant_name || '').trim().toLowerCase() : '';
+      if (slotRow.is_approved && Array.isArray(slotRow.final_allocation) && slotRow.final_allocation.length && name) {
+        const hit = slotRow.final_allocation.find(
+          (x) => String(x.plant || '').trim().toLowerCase() === name
+        );
+        if (hit) return Number(hit.mwh) || 0;
+        return 0;
+      }
+      const split = Array.isArray(slotRow.allocation_split) ? slotRow.allocation_split : [];
+      const f = split.find(x => Number(x.plant_id) === Number(plantId));
+      return f ? Number(f.mwh) || 0 : 0;
+    }
+
+    function closeSlotOverrideModal() {
+      document.getElementById('slotOverrideModal').style.display = 'none';
+      slotOverrideTargetIndex = null;
+      const err = document.getElementById('slotOverrideModalErr');
+      if (err) { err.classList.add('d-none'); err.textContent = ''; }
+    }
+
+    function openSlotOverrideModal(slotIdx) {
+      const row = cachedSlotSavingsAnalysis.find(x => Number(x.slot_index) === Number(slotIdx));
+      if (!row || !cachedPlants.length) return;
+      slotOverrideTargetIndex = Number(slotIdx);
+      // The override inputs should sum to the slot's unallocated MWh for the selected revision.
+      slotOverrideTotalAllowed = unallocatedForRevision(row, selectedRevisionForSlot(slotIdx));
+      document.getElementById('slotOverrideModalTitle').textContent = 'Override slot ' + slotIdx + ' (' + (row.time_block || slotIndexToTimeBlock(slotIdx)) + ')';
+      document.getElementById('slotOverrideModalHint').textContent =
+        'Enter MWh per plant (AI pool). Total must not exceed ' + formatFloat(slotOverrideTotalAllowed) + ' MWh; any shortfall is sent to IEX.';
+      let body = '';
+      cachedPlants.forEach(p => {
+        const v = defaultMwhFromSplit(row, p.plant_id);
+        body += `<div class="mb-3"><label class="form-label small mb-1">${p.plant_name || 'Plant'}</label>` +
+          `<input type="number" step="0.01" min="0" class="form-control form-control-sm ov-plant-mwh plant-input" data-plant="${p.plant_id}" data-plant-id="${p.plant_id}" value="${formatFloat(v)}" /></div>`;
+      });
+      document.getElementById('slotOverrideModalBody').innerHTML = body;
+      document.getElementById('slotOverrideModalErr').classList.add('d-none');
+      document.getElementById('slotOverrideModal').style.display = 'flex';
+      updateTotalDisplay();
+      attachAutoAdjust();
+    }
+
+    async function submitSlotOverride() {
+      const errEl = document.getElementById('slotOverrideModalErr');
+      if (slotOverrideTargetIndex == null || !cachedConsumerId) return;
+      const dateStr = dateSelect.value;
+      errEl.classList.add('d-none');
+      try {
+        const res = await fetchWithAuth('/api/slot-override-approve/', {
+          method: 'POST',
+          body: JSON.stringify({
+            date: dateStr,
+            slot_index: slotOverrideTargetIndex,
+            consumer_id: cachedConsumerId,
+            approved_revision: selectedRevisionForSlot(slotOverrideTargetIndex),
+            allocations: cachedPlants.map(p => {
+              const inp = document.querySelector('.ov-plant-mwh[data-plant-id="' + p.plant_id + '"]');
+              const mwh = inp ? (parseFloat(inp.value || '0') || 0) : 0;
+              return { plant_id: p.plant_id, mwh };
+            })
+          })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          errEl.textContent = typeof data.detail === 'string' ? data.detail : (data.detail ? JSON.stringify(data.detail) : 'Override failed');
+          errEl.classList.remove('d-none');
+          return;
+        }
+        closeSlotOverrideModal();
+        await loadData(dateStr);
+        openAiRecModal();
+      } catch (e) {
+        errEl.textContent = e.message || 'Override failed';
+        errEl.classList.remove('d-none');
+      }
+    }
+
+    async function approveSlotAi(slotIdx, fromAutoTimer) {
+      if (!cachedConsumerId) return;
+      const dateStr = dateSelect.value;
+      try {
+        const res = await fetchWithAuth('/api/slot-approve/', {
+          method: 'POST',
+          body: JSON.stringify({
+            date: dateStr,
+            slot_index: parseInt(slotIdx, 10),
+            consumer_id: cachedConsumerId,
+            approved_revision: selectedRevisionForSlot(slotIdx)
+          })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          if (fromAutoTimer) {
+            setStatus(typeof data.detail === 'string' ? data.detail : 'Auto-approve failed', false);
+          } else {
+            alert(typeof data.detail === 'string' ? data.detail : 'Approve failed');
+          }
+          return;
+        }
+        clearSlotAutoApprove(slotIdx);
+        if (fromAutoTimer) {
+          setStatus('Slot ' + slotIdx + ' auto-approved after revision timer.', true);
+        }
+        await loadData(dateStr);
+        openAiRecModal();
+      } catch (e) {
+        if (fromAutoTimer) {
+          setStatus(e.message || 'Auto-approve failed', false);
+        } else {
+          alert(e.message || 'Approve failed');
+        }
+      }
+    }
+
+    async function resolveGeneratorSupplyRevision(revisionId, action, slots) {
+      try {
+        const payload = {
+          revision_id: parseInt(revisionId, 10),
+          action: action,
+          client_tz_offset_minutes: new Date().getTimezoneOffset() * -1,
+        };
+        if (slots && slots.length) payload.slots = slots;
+        const res = await fetchWithAuth('/api/consumer-manager/generator-upload-revisions/resolve/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          alert(typeof data.detail === 'string' ? data.detail : 'Generator supply action failed');
+          return;
+        }
+        setStatus(action === 'approve' ? 'Generator supply revision approved.' : 'Generator supply updated.', true);
+        await loadData(dateSelect.value);
+        await openAiRecModal();
+      } catch (e) {
+        alert(e.message || 'Failed');
+      }
+    }
+
+    function closeGenSupplyOverrideModal() {
+      const m = document.getElementById('genSupplyOverrideModal');
+      if (m) m.style.display = 'none';
+      genSupplyOverrideRevisionId = null;
+    }
+
+    function openGenSupplyOverrideModal(revisionId) {
+      genSupplyOverrideRevisionId = revisionId;
+      const p = cachedSupplyRevisionMeta.pending_supply_revision;
+      const errEl = document.getElementById('genSupplyOverrideErr');
+      if (errEl) {
+        errEl.classList.add('d-none');
+        errEl.textContent = '';
+      }
+      const tbody = document.getElementById('genSupplyOverrideTbody');
+      if (!tbody || !p || String(p.id) !== String(revisionId)) return;
+      tbody.innerHTML = '';
+      (p.changed_slots || []).forEach((cs) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML =
+          '<td>' +
+          cs.slot_index +
+          '</td><td>' +
+          formatFloat(cs.previous_mwh) +
+          '</td><td>' +
+          formatFloat(cs.new_mwh) +
+          '</td><td><input type="number" step="0.0001" min="0" class="form-control form-control-sm gen-ov-supply" data-slot-index="' +
+          cs.slot_index +
+          '" value="' +
+          cs.new_mwh +
+          '" /></td>';
+        tbody.appendChild(tr);
+      });
+      const titleEl = document.getElementById('genSupplyOverrideModalTitle');
+      if (titleEl) titleEl.textContent = 'Override generator supply — Revision ' + p.revision_number;
+      document.getElementById('genSupplyOverrideModal').style.display = 'flex';
+    }
+
+    async function revokeSlotAi(slotIdx) {
+      if (!cachedConsumerId) return;
+      const dateStr = dateSelect.value;
+      try {
+        const res = await fetchWithAuth('/api/slot-revoke/', {
+          method: 'POST',
+          body: JSON.stringify({
+            date: dateStr,
+            slot_index: parseInt(slotIdx, 10),
+            consumer_id: cachedConsumerId
+          })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          alert(typeof data.detail === 'string' ? data.detail : 'Revoke failed');
+          return;
+        }
+        setStatus('Slot ' + slotIdx + ' approval revoked.', true);
+        startSlotAutoApproveTimer(slotIdx);
+        await loadData(dateStr);
+        openAiRecModal();
+      } catch (e) {
+        alert(e.message || 'Revoke failed');
+      }
+    }
+
+    async function openAiRecModal() {
+      await refreshUserSlotVariationPrefs();
+      const modal = document.getElementById('aiRecModal');
+      const title = document.getElementById('aiRecModalTitle');
+      const body = document.getElementById('aiRecModalBody');
+      title.textContent = 'AI Recommendation – Savings Comparison';
+      let tableHtml = '';
+      if (cachedSlotSavingsAnalysis.length > 0) {
+        const latestRevLabelRow =
+          (cachedSupplyRevisionMeta.labels || []).find((x) => x.key === effectiveDefaultRevisionKey()) || {};
+        const latestRevLabelTxt = latestRevLabelRow.label || 'Latest generator revision';
+        tableHtml += `
+        <h5 class="fw-bold mt-2 mb-2">Slot-wise recommendation (96 slots — allocate vs sell per 15-min)</h5>
+        <p class="text-muted small mb-3">Approve each slot after review, or use <strong>Override</strong> to split the AI pool across plants; any remainder is recorded as IEX. <strong>Sell all on IEX</strong> is the counterfactual profit if the whole pool were sold on IEX — hidden when the full pool goes to plants only. Use hour buttons to jump to the first slot of that hour.</p>
+        <p class="text-muted small mb-3">Upcoming (yellow) slots default to <strong>${latestRevLabelTxt}</strong> (actual generator upload revision numbers). Green rows are time-locked for display unless the generator has a <strong>pending supply revision</strong> on that slot — then use <strong>Approve supply</strong> / <strong>Override supply</strong>.</p>
+        <p class="text-muted small mb-3">Color code: <span class="text-success fw-semibold">green</span> = time-locked row; <span class="text-warning fw-semibold">yellow</span> = editable or pending generator revision.</p>
+        <div class="cm-pw-hour-jump">
+          <span class="text-muted small w-100 mb-1 d-block">Jump to slot (by hour):</span>`;
+        for (let hr = 1; hr <= 24; hr++) {
+          const firstSlot = (hr - 1) * 4 + 1;
+          tableHtml += `<button type="button" class="btn btn-success btn-sm btn-hour-jump aiSlotJumpBtn" data-first-slot="${firstSlot}">H${hr}</button>`;
+        }
+        tableHtml += `</div>
+        <div id="aiSlotWiseTableWrap" class="kai-edit-slots-wrap kai-pw-tall table-responsive mb-3">
+          <table class="table table-striped table-hover align-middle kai-edit-slots-table mb-0">
+            <thead><tr><th style="width:56px;">Sl. No.</th><th>Time slot</th><th style="min-width:140px;">Revision no.</th><th>Unallocated (MWh)</th><th>Recommendation</th><th style="min-width:140px;">Sell all on IEX (₹)</th><th style="min-width:140px;">Path profit (₹)</th><th style="min-width:150px;">Action</th></tr></thead>
+            <tbody>`;
+        cachedSlotSavingsAnalysis.forEach((s, i) => {
+          const slotIdx = s.slot_index != null ? s.slot_index : (i + 1);
+          const selectedDate = dateSelect && dateSelect.value ? dateSelect.value : '';
+          const frozenUi = slotLooksReadonlyGreen(slotIdx, selectedDate);
+          const pendingGen = isPendingGeneratorSupplySlot(slotIdx);
+          const aiApproved = s.is_approved === true;
+          if (frozenUi && !pendingGen) clearSlotAutoApprove(slotIdx);
+          const revDefault = slotSupplyDefaultKey(s);
+          const selectDisabled = aiApproved || (frozenUi && !pendingGen);
+          const unallocLatest = unallocatedForRevision(s, revDefault);
+          const actionInner = buildAiSlotActionInnerHtml(s, slotIdx, frozenUi, aiApproved);
+          const rowClass = frozenUi && !pendingGen ? 'ai-slot-approved-row' : 'ai-slot-revised-row';
+          const revSelectHtml = aiRevisionSelectOptionsHtml(revDefault);
+          tableHtml += `<tr id="aiSlotRecRow${slotIdx}" class="ai-slot-rec-row ${rowClass}">
+            <td>${i + 1}</td>
+            <td>${s.time_block || slotIndexToTimeBlock(slotIdx)}</td>
+            <td>
+              <select id="aiSlotRevisionSelect${slotIdx}" class="form-select form-select-sm aiSlotRevisionSelect" data-slot-index="${slotIdx}" style="min-width:150px;" ${selectDisabled ? 'disabled' : ''}>${revSelectHtml}</select>
+            </td>
+            <td id="aiUnallocCell${slotIdx}">${formatFloat(unallocLatest)}</td>
+            <td style="font-size:0.88em; vertical-align:top;">
+              <div>${slotRecommendationHtml(s, revDefault)}</div>
+              <button type="button" class="btn btn-outline-secondary btn-sm mt-2 btnSlotRecSummary" data-slot-index="${slotIdx}">View Summary</button>
+            </td>
+            <td style="font-size:0.9em;">${slotIexSavingsCell(s)}</td>
+            <td style="font-size:0.9em;">${slotAllocationSavingsCell(s)}</td>
+            <td class="aiSlotActionCell" data-slot-index="${slotIdx}"><div class="d-flex flex-column align-items-start gap-1">${actionInner}</div></td>
+          </tr>`;
+        });
+        tableHtml += `</tbody></table></div>`;
+      } else {
+        tableHtml = '<p class="text-muted small mb-0">No slot-level savings analysis for this day yet.</p>';
+      }
+      body.innerHTML = tableHtml;
+      document.querySelectorAll('.aiSlotJumpBtn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const first = parseInt(btn.getAttribute('data-first-slot'), 10);
+          const row = document.getElementById('aiSlotRecRow' + first);
+          const wrap = document.getElementById('aiSlotWiseTableWrap');
+          if (row && wrap) {
+            row.style.background = 'rgba(21, 114, 232, 0.12)';
+            row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setTimeout(() => { row.style.background = ''; }, 1200);
+          }
+        });
+      });
+      document.querySelectorAll('.btnSlotApprove').forEach((btn) => {
+        btn.addEventListener('click', () => approveSlotAi(btn.getAttribute('data-slot-index')));
+      });
+      document.querySelectorAll('.btnSlotOverride').forEach((btn) => {
+        btn.addEventListener('click', () => openSlotOverrideModal(btn.getAttribute('data-slot-index')));
+      });
+      document.querySelectorAll('.btnGenSupplyApprove').forEach((btn) => {
+        btn.addEventListener('click', () => resolveGeneratorSupplyRevision(btn.getAttribute('data-revision-id'), 'approve'));
+      });
+      document.querySelectorAll('.btnGenSupplyOverride').forEach((btn) => {
+        btn.addEventListener('click', () => openGenSupplyOverrideModal(btn.getAttribute('data-revision-id')));
+      });
+      document.querySelectorAll('.btnSlotRecSummary').forEach(btn => {
+        btn.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          openSlotRecSummaryModal(btn.getAttribute('data-slot-index'));
+        });
+      });
+      document.querySelectorAll('.aiSlotRevisionSelect').forEach(sel => {
+        sel.addEventListener('change', () => {
+          const slotIdx = parseInt(sel.getAttribute('data-slot-index'), 10);
+          const row = cachedSlotSavingsAnalysis.find(x => Number(x.slot_index) === Number(slotIdx));
+          const cell = document.getElementById('aiUnallocCell' + slotIdx);
+          if (!row || !cell) return;
+          cell.textContent = formatFloat(unallocatedForRevision(row, sel.value));
+          applyAiRowVisualState(slotIdx, row, row.is_approved === true, sel.value, (dateSelect && dateSelect.value) || '');
+          if (row.is_approved !== true) {
+            startSlotAutoApproveTimer(slotIdx);
+          }
+        });
+      });
+      cachedSlotSavingsAnalysis.forEach((s, i) => {
+        const slotIdx = s.slot_index != null ? s.slot_index : (i + 1);
+        const sel = document.getElementById('aiSlotRevisionSelect' + slotIdx);
+        applyAiRowVisualState(
+          slotIdx,
+          s,
+          s.is_approved === true,
+          sel ? sel.value : effectiveDefaultRevisionKey(),
+          (dateSelect && dateSelect.value) || ''
+        );
+      });
+      // Ensure unapproved rows always have a visible 15-min timer running (including time-locked rows with pending generator revision).
+      cachedSlotSavingsAnalysis.forEach((s) => {
+        const slotIdx = Number(s && s.slot_index);
+        const selectedDate = dateSelect && dateSelect.value ? dateSelect.value : '';
+        const frozen = slotLooksReadonlyGreen(slotIdx, selectedDate);
+        const pendGen = isPendingGeneratorSupplySlot(slotIdx);
+        if (
+          slotIdx >= 1 &&
+          slotIdx <= 96 &&
+          s.is_approved !== true &&
+          !slotAutoApproveDeadlines[slotIdx] &&
+          (!frozen || pendGen)
+        ) {
+          startSlotAutoApproveTimer(slotIdx);
+        }
+      });
+      reviveSlotAutoApproveTimers();
+      modal.style.display = 'flex';
+      refreshAiModalRealtimeState();
+      if (aiModalRealtimeTicker) clearInterval(aiModalRealtimeTicker);
+      aiModalRealtimeTicker = setInterval(refreshAiModalRealtimeState, 30000);
+    }
+
+    function closeAiRecModal() {
+      document.getElementById('aiRecModal').style.display = 'none';
+      if (aiModalRealtimeTicker) {
+        clearInterval(aiModalRealtimeTicker);
+        aiModalRealtimeTicker = null;
+      }
+    }
+
+    function renderPlantsTable() {
+      setPlantsTableHeader();
+      tbody.innerHTML = '';
+      const isApproved = cachedRunStatus === 'APPROVED';
+      const globalAiRecommendationRow = document.getElementById('globalAiRecommendationRow');
+      const globalApproveRow = document.getElementById('globalApproveRow');
+      if (globalAiRecommendationRow) {
+        if (cachedPlants.length === 0) {
+          globalAiRecommendationRow.innerHTML = '';
+        } else {
+          globalAiRecommendationRow.innerHTML =
+            '<button type="button" class="btn btn-primary btn-sm" id="openGlobalAiRecBtn">View AI Recommendation</button>' +
+            '<span class="text-muted small">Single recommendation view for all plants.</span>';
+          document.getElementById('openGlobalAiRecBtn')?.addEventListener('click', openAiRecModal);
+        }
+      }
+      if (globalApproveRow) {
+        if (isApproved) {
+          const pend = cachedSupplyRevisionMeta && cachedSupplyRevisionMeta.pending_supply_revision;
+          const pendBanner = pend
+            ? (
+                '<div class="alert alert-warning py-2 small mb-3 d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-2">' +
+                '<div><strong>Generator Revision ' + pend.revision_number + '</strong> is pending your approval. Auto-approves in ' +
+                escapeHtml(formatGenCmCountdown(pend.seconds_remaining)) +
+                '.</div>' +
+                '<div class="d-flex gap-2 flex-wrap">' +
+                '<button type="button" class="btn btn-success btn-sm" id="approveRecentSupplyBtn">Approve recent revision</button>' +
+                '<button type="button" class="btn btn-outline-primary btn-sm" id="overrideRecentSupplyBtn">Override…</button>' +
+                '</div></div>'
+              )
+            : '';
+          globalApproveRow.innerHTML =
+            pendBanner +
+            '<p class="text-muted small mb-3">This day\'s allocation is <strong>approved</strong>. Final supply and grid utilization are updated.</p>' +
+            '<div class="d-flex flex-wrap gap-2">' +
+              '<button type="button" class="btn btn-primary btn-sm" id="viewDayAllocWithLossBtn">View allocations (with loss)</button>' +
+              '<button type="button" class="btn btn-warning btn-sm text-white" id="viewDayAllocWithoutLossBtn">View allocations (without loss)</button>' +
+            '</div>' +
+            '<p class="text-muted small mt-3 mb-0" style="max-width:42rem">You can view the approved allocations below.</p>';
+          document.getElementById('viewDayAllocWithLossBtn')?.addEventListener('click', () => openDayAllocationModal(true));
+          document.getElementById('viewDayAllocWithoutLossBtn')?.addEventListener('click', () => openDayAllocationModal(false));
+          if (pend) {
+            document.getElementById('approveRecentSupplyBtn')?.addEventListener('click', () => resolveGeneratorSupplyRevision(pend.id, 'approve'));
+            document.getElementById('overrideRecentSupplyBtn')?.addEventListener('click', () => openGenSupplyOverrideModal(pend.id));
+          }
+        } else if (cachedPlants.length === 0) {
+          globalApproveRow.innerHTML = '';
+        } else {
+          const totalSlots = (cachedSlotSavingsAnalysis && cachedSlotSavingsAnalysis.length) ? cachedSlotSavingsAnalysis.length : 96;
+          const approvedSlots = (cachedSlotSavingsAnalysis || []).filter(s => s && s.is_approved === true).length;
+          globalApproveRow.innerHTML =
+            '<div class="d-flex flex-column flex-sm-row flex-wrap align-items-sm-center gap-3">' +
+              '<button type="button" class="btn btn-primary btn-sm btnApprove" id="approveAllocationBtn">Approve allocation (overall)</button>' +
+              '<p class="text-muted small mb-0">Slot approvals: <strong>' + approvedSlots + '/' + totalSlots + '</strong>. Overall approval will auto-approve remaining slots using the current AI recommendation, then finalize the day.</p>' +
+            '</div>';
+          document.getElementById('approveAllocationBtn')?.addEventListener('click', handleApprove);
+        }
+      }
+      cachedPlants.forEach((p, i) => {
+        const tr = document.createElement('tr');
+        tr.className = '';
+        const viewBtn = `<button type="button" class="btn btn-primary btn-sm btnView" data-index="${i}">View base allocation</button>`;
+        const viewAiBtn = `<button type="button" class="btn btn-outline-primary btn-sm btnViewAi mt-1" data-index="${i}">View AI allocations</button>`;
+        const actionBtns = `<div class="d-flex flex-column align-items-end gap-1">${viewBtn}${viewAiBtn}</div>`;
+        const finalS = isApproved ? approvedSlotsFinalSupplyMwh(p) : finalSupplyMwh(p);
+        const diff = demandMinusFinalSupplyMwh(p, finalS);
+        if (isApproved) {
+          tr.innerHTML = `
+            <td>${i + 1}</td>
+            <td class="fw-semibold">${p.plant_name || '—'}</td>
+            <td class="text-end">${formatFloat(p.demand_total_mwh)}</td>
+            <td class="text-end">${formatFloat(p.base_total_mwh)}</td>
+            <td class="text-end fw-semibold text-primary">${formatFloat(finalS)}</td>
+            <td class="text-end">${formatFloat(diff)}</td>
+            <td class="text-end text-nowrap">${actionBtns}</td>
+          `;
+        } else {
+          tr.innerHTML = `
+            <td>${i + 1}</td>
+            <td class="fw-semibold">${p.plant_name || '—'}</td>
+            <td class="text-end">${formatFloat(p.demand_total_mwh)}</td>
+            <td class="text-end">${formatFloat(p.base_total_mwh)}</td>
+            <td class="text-end text-nowrap">${actionBtns}</td>
+          `;
+        }
+        tbody.appendChild(tr);
+      });
+      tbody.querySelectorAll('.btnView').forEach(btn => {
+        btn.addEventListener('click', () => openViewModal(cachedPlants[parseInt(btn.dataset.index, 10)]));
+      });
+      tbody.querySelectorAll('.btnViewAi').forEach(btn => {
+        btn.addEventListener('click', () => openAiAllocModal(cachedPlants[parseInt(btn.dataset.index, 10)]));
+      });
+    }
+
+
+    async function handleApprove() {
+      const dateStr = dateSelect.value;
+      if (!dateStr || cachedPlants.length === 0) return;
+      setStatus('Approving overall allocation...', true);
+
+      // Ensure all slots are approved before overall approval.
+      // If the user hasn't manually approved/overridden some slots, we approve them as-is (AI recommendation).
+      const unapproved = (cachedSlotSavingsAnalysis || [])
+        .filter(s => s && s.is_approved !== true)
+        .map(s => parseInt(s.slot_index || 0, 10))
+        .filter(x => x >= 1 && x <= 96);
+
+      if (unapproved.length) {
+        setStatus('Auto-approving remaining slots (' + unapproved.length + ')...', true);
+        const bulkRes = await fetchWithAuth('/api/slot-approve-bulk/', {
+          method: 'POST',
+          body: JSON.stringify({
+            date: dateStr,
+            consumer_id: cachedConsumerId,
+            slots: unapproved.map((slotIdx) => ({
+              slot_index: slotIdx,
+              approved_revision: selectedRevisionForSlot(slotIdx)
+            }))
+          })
+        });
+        const bulkData = await bulkRes.json().catch(() => ({}));
+        if (!bulkRes.ok) {
+          const msg = typeof bulkData.detail === 'string'
+            ? bulkData.detail
+            : (bulkData.detail ? JSON.stringify(bulkData.detail) : 'Slot bulk approve failed');
+          setStatus(msg + (bulkData.failed_at_slot != null ? ' (slot ' + bulkData.failed_at_slot + ')' : ''), false);
+          return;
+        }
+        await loadData(dateStr);
+      }
+
+      setStatus('Finalizing overall approval...', true);
+      const overrides = cachedPlants.map(p => ({
+        plant_id: p.plant_id,
+        ai_alloc_mwh_override_total_mwh: p.ai_final_total_mwh
+      }));
+      try {
+        const res = await fetchWithAuth('/api/consumer-generator-allocations/approve/', {
+          method: 'POST',
+          body: JSON.stringify({ date: dateStr, overrides })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setStatus(data.detail || 'Approval failed', false);
+          return;
+        }
+        setStatus('Overall allocation approved.', true);
+        await loadData(dateStr);
+      } catch (e) {
+        setStatus(e.message || 'Approval failed', false);
+      }
+    }
+
+    async function loadData(dateStr) {
+      setStatus('Loading...', true);
+      document.getElementById('plantsThead').innerHTML = '';
+      tbody.innerHTML = '<tr><td colspan="7" class="py-4 text-muted text-center small">Loading…</td></tr>';
+      try {
+        const res = await fetchWithTimeout(
+          '/api/consumer-generator-allocations/recommendations/?date=' + encodeURIComponent(dateStr),
+          undefined,
+          25000
+        );
+        const data = await res.json().catch(() => ({}));
+        tbody.innerHTML = '';
+        if (!res.ok) {
+          tbody.innerHTML = '<tr><td colspan="7" class="py-6 text-red-600 text-sm">' + (data.detail || 'Failed to load') + '</td></tr>';
+          setStatus(data.detail || 'Failed to load', false);
+          return;
+        }
+        cachedPlants = data.plants || [];
+        cachedRunStatus = data.run_status;
+        cachedConsumerId = data.consumer_id != null ? data.consumer_id : null;
+        cachedSlotRows = data.slot_rows || [];
+        cachedSlotSavingsAnalysis = data.slot_savings_analysis || [];
+        cachedSupplyRevisionMeta = {
+          labels: data.generator_supply_revision_labels || [],
+          default_key: data.default_supply_revision_key || 'revision2',
+          pending_supply_revision: data.pending_supply_revision || null,
+        };
+        cachedPlantSlotAllocations = data.plant_slot_allocations || [];
+        renderPlantsTable();
+        if (cachedPlants.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="' + tableColspan() + '" class="py-4 text-muted text-center small">No plants</td></tr>';
+        }
+        setStatus('Showing plantwise allocation for selected day.', true);
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="7" class="py-4 text-danger text-center small">' + (e.message || 'Failed to load') + '</td></tr>';
+        setStatus(e.message || 'Failed to load', false);
+      }
+    }
+
+    const allowedDates = buildAllowedDates();
+    dateSelect.innerHTML = allowedDates.map(d => `<option value="${d.dateStr}">${d.label}</option>`).join('');
+    dateSelect.value = allowedDates[0].dateStr;
+
+    dateSelect.addEventListener('change', () => loadData(dateSelect.value));
+
+    document.getElementById('slotOverrideSubmitBtn')?.addEventListener('click', submitSlotOverride);
+    document.getElementById('genSupplyOverrideSubmitBtn')?.addEventListener('click', async () => {
+      const rid = genSupplyOverrideRevisionId;
+      if (!rid) return;
+      const inputs = document.querySelectorAll('#genSupplyOverrideTbody .gen-ov-supply');
+      const slots = [];
+      inputs.forEach((inp) => {
+        slots.push({
+          slot_index: parseInt(inp.getAttribute('data-slot-index'), 10),
+          supply_mwh: parseFloat(inp.value),
+        });
+      });
+      await resolveGeneratorSupplyRevision(rid, 'override', slots);
+      closeGenSupplyOverrideModal();
+    });
+
+    /* Inline onclick on modals runs in global scope; these helpers live inside the IIFE. */
+    window.closeAiRecModal = closeAiRecModal;
+    window.closeSlotRecSummaryModal = closeSlotRecSummaryModal;
+    window.closeViewModal = closeViewModal;
+    window.closeAiAllocModal = closeAiAllocModal;
+    window.closeDayAllocModal = closeDayAllocModal;
+    window.closeTxLossModal = closeTxLossModal;
+    window.closeSlotOverrideModal = closeSlotOverrideModal;
+    window.closeGenSupplyOverrideModal = closeGenSupplyOverrideModal;
+
+    (async function initPwPage() {
+      await refreshUserSlotVariationPrefs();
+      loadData(dateSelect.value);
+    })();
+})();
+  </script>
+{% endblock %}

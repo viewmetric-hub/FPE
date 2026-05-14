@@ -1,0 +1,852 @@
+{% extends "dashboard/generator_base_kaiadmin.html" %}
+{% load static %}
+
+{% block title %}Generator Allocation — ViewMetric{% endblock %}
+
+{% block extra_head %}
+<style>
+  .kai-sched-table .table thead th {
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #95aac9;
+    font-weight: 600;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  }
+  .kai-sched-table .table tbody td { vertical-align: middle; padding-top: 0.75rem; padding-bottom: 0.75rem; }
+  .kai-demand-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: #fff;
+    flex-shrink: 0;
+    box-shadow: 0 4px 12px rgba(21, 114, 232, 0.25);
+  }
+  .kai-demand-avatar.alt {
+    background: linear-gradient(135deg, #6861ce, #4c4b9e) !important;
+    box-shadow: 0 4px 12px rgba(104, 97, 206, 0.3);
+  }
+  .kai-demand-slots-wrap {
+    max-height: min(70vh, 640px);
+    overflow: auto;
+    border-radius: 12px;
+    border: 1px solid rgba(21, 114, 232, 0.18);
+    box-shadow: 0 6px 24px rgba(21, 114, 232, 0.08);
+    background: #fff;
+  }
+  .kai-demand-slots-table {
+    margin-bottom: 0;
+    --bs-table-striped-bg: rgba(21, 114, 232, 0.045);
+    --bs-table-hover-bg: rgba(21, 114, 232, 0.1);
+  }
+  .kai-demand-slots-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    font-size: 0.65rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: #fff !important;
+    border: none !important;
+    padding: 0.65rem 0.5rem !important;
+    background: linear-gradient(135deg, #1572e8 0%, #1269db 48%, #0d5bbd 100%) !important;
+    box-shadow: 0 2px 8px rgba(21, 114, 232, 0.25);
+    white-space: nowrap;
+  }
+  .kai-demand-slots-table tbody td {
+    font-size: 0.875rem;
+    border-color: rgba(21, 114, 232, 0.08);
+  }
+  .kai-slot-approved td {
+    background: #e8f7e9 !important;
+  }
+  .kai-slot-revised td {
+    background: #fff7cc !important;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+            <div class="mb-4 pt-2" id="demandPageIntro">
+              <div class="page-pretitle">Allocation view</div>
+              <h3 class="fw-bold mb-3">Approved allocation</h3>
+              <p class="text-muted mb-0" style="max-width: 42rem; line-height: 1.6">
+                See how <strong class="text-dark">approved generator supply</strong> lines up with plant splits, IEX, and totals per quarter-hour.
+                Choose an energy manager to open their <strong class="text-dark">approved days</strong> in this window, then pick a <strong class="text-dark">revision</strong> and day for full slot detail.
+              </p>
+            </div>
+
+            <div class="mb-3">
+              <button type="button" id="backBtn" class="btn btn-label-secondary btn-sm d-none">
+                <span class="btn-label"><i class="fas fa-arrow-left"></i></span>
+                <span id="backBtnLabel">Back</span>
+              </button>
+            </div>
+
+            <div id="consumersListSection" class="kai-sched-table">
+              <h5 class="fw-bold mb-3">Energy managers</h5>
+              <p class="text-muted small mb-3">Consumer managers with allocation approved for generator visibility on the active planning day.</p>
+              <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0" id="consumersTable">
+                  <thead>
+                    <tr>
+                      <th>Energy manager</th>
+                      <th class="text-end" style="width: 200px">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div id="approvedDaysSection" class="d-none kai-sched-table mt-2">
+              <h5 class="fw-bold mb-2">Approved days</h5>
+              <p class="text-muted small mb-3">
+                Use the day control to move within the rolling seven-day window (from today). The table shows revisions 1–4 for the selected day only; open a row for slot-level detail.
+              </p>
+              <p class="fw-bold text-dark mb-2" id="approvedDaysEnergyManagerLabel"></p>
+              <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+                <label class="small text-muted mb-0 fw-semibold text-uppercase" for="approvedDaysWindowSelect" style="letter-spacing: 0.06em">Day</label>
+                <select id="approvedDaysWindowSelect" class="form-select form-select-sm" style="min-width: 17rem" aria-label="Day in seven-day window"></select>
+              </div>
+              <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0" id="approvedDaysTable">
+                  <thead>
+                    <tr>
+                      <th style="width: 220px">Date</th>
+                      <th style="width: 140px">Revision</th>
+                      <th style="width: 140px">Status</th>
+                      <th style="width: 160px">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="approvedDaysTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div id="consumerDemandSection" class="d-none mt-2">
+              <div class="row g-3 mb-4">
+                <div class="col-md-6 col-lg-4">
+                  <div class="card card-stats card-round card-primary h-100">
+                    <div class="card-body">
+                      <div class="row align-items-center">
+                        <div class="col-icon">
+                          <div class="icon-big text-center icon-primary bubble-shadow-small"><i class="fas fa-bolt"></i></div>
+                        </div>
+                        <div class="col col-stats ms-3 ms-sm-0">
+                          <div class="numbers">
+                            <p class="card-category">Total approved supply (gross MWh)</p>
+                            <h4 class="card-title mb-0" id="totalDemand">0</h4>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div id="slotViewControls" class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                  <label class="small text-muted mb-0 fw-semibold text-uppercase" for="slotViewRevisionSelect" style="letter-spacing: 0.06em">Revision</label>
+                  <select id="slotViewRevisionSelect" class="form-select form-select-sm" style="min-width: 9rem" aria-label="Allocation revision">
+                    <option value="1">Revision 1</option>
+                    <option value="2">Revision 2</option>
+                    <option value="3">Revision 3</option>
+                    <option value="4">Latest revision</option>
+                  </select>
+                  <label class="small text-muted mb-0 fw-semibold text-uppercase" for="slotViewDaySelect" style="letter-spacing: 0.06em">Day</label>
+                  <select id="slotViewDaySelect" class="form-select form-select-sm" style="min-width: 14rem" aria-label="Schedule day"></select>
+                  <label class="small text-muted mb-0 fw-semibold text-uppercase" for="slotViewHourFilter" style="letter-spacing: 0.06em">Hour</label>
+                  <select id="slotViewHourFilter" class="form-select form-select-sm" style="min-width: 15rem" aria-label="Show slots for one hour or all">
+                    <option value="">All hours</option>
+                  </select>
+                </div>
+                <small class="text-muted" id="slotViewHourHint">All 96 quarter-hour slots. Green = approved/locked, yellow = revised.</small>
+              </div>
+              <div class="small text-muted mb-2" id="slotColorLegend">
+                <span class="me-3"><span class="badge bg-success-subtle text-success border border-success-subtle">Green</span> Approved/locked slot (past or no change from previous revision)</span>
+                <span><span class="badge bg-warning-subtle text-warning border border-warning-subtle">Yellow</span> Revised slot (value changed vs previous revision and still editable)</span>
+              </div>
+
+              <div class="kai-demand-slots-wrap table-responsive" id="slotViewSlotsScrollWrap">
+                <table class="table table-striped table-hover align-middle kai-demand-slots-table mb-0" id="slotsTable">
+                  <thead>
+                    <tr id="slotsTheadRow">
+                      <th>Slot</th>
+                      <th>Time block</th>
+                      <th id="slotColsHeader">Loading…</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="text-muted small mt-4" id="statusMsg" aria-live="polite"></div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+  var fetchWithAuth = window.kaiFetchWithAuth;
+  if (!fetchWithAuth) return;
+
+  function setStatus(msg) {
+    var el = document.getElementById('statusMsg');
+    if (el) el.textContent = msg || '';
+  }
+
+  function escapeHtml(s) {
+    if (s == null || s === '') return '';
+    var div = document.createElement('div');
+    div.textContent = s;
+    return div.innerHTML;
+  }
+
+  function initials(name) {
+    if (!name || !String(name).trim()) return '?';
+    var parts = String(name).trim().split(/\s+/);
+    if (parts.length >= 2) return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
+    return name.slice(0, 2).toUpperCase();
+  }
+
+  function toDateStr(d) {
+    var yyyy = d.getFullYear();
+    var mm = String(d.getMonth() + 1).padStart(2, '0');
+    var dd = String(d.getDate()).padStart(2, '0');
+    return yyyy + '-' + mm + '-' + dd;
+  }
+
+  /** Rolling seven calendar days starting today (real-time revisions apply to today until each slot closes). */
+  function buildAllowedDates() {
+    var base = new Date();
+    base.setHours(0, 0, 0, 0);
+    var out = [];
+    for (var i = 0; i < 7; i++) {
+      var d = new Date(base.getTime() + i * 24 * 60 * 60 * 1000);
+      out.push({
+        dateStr: toDateStr(d),
+        label: i === 0 ? 'Today' : d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }),
+      });
+    }
+    return out;
+  }
+
+  function num(v) {
+    var n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function formatFloat(v) {
+    var n = Number(v);
+    if (Number.isNaN(n)) return '0';
+    return n.toFixed(2).replace(/\.?0+$/, '');
+  }
+
+  /** Same revision chain as Schedule revisions (base schedule → R1 → … → R4). */
+  function applyRevisionStep(baseVal, slotIndex, revisionNo) {
+    var v = num(baseVal);
+    var idx = parseInt(slotIndex, 10) || 0;
+    var pct;
+    var bias;
+    if (revisionNo === 1) {
+      pct = ((idx % 9) - 4) / 100;
+      bias = ((idx % 4) - 1.5) * 0.03;
+    } else if (revisionNo === 2) {
+      pct = ((idx % 11) - 5) / 90;
+      bias = ((idx % 5) - 2) * 0.04 + 0.05;
+    } else if (revisionNo === 3) {
+      pct = ((idx % 10) - 4.5) / 95;
+      bias = ((idx % 6) - 2.5) * 0.033 + 0.02;
+    } else {
+      pct = ((idx % 12) - 5.5) / 95;
+      bias = ((idx % 7) - 3) * 0.036 + 0.03;
+    }
+    var out = v * (1 + pct) + bias;
+    return Math.max(0, num(out.toFixed(2)));
+  }
+
+  function generatorSupplyAtRevision(baseGenMwh, slotIndex, revisionNo) {
+    var idx = parseInt(slotIndex, 10) || 0;
+    var v = num(baseGenMwh);
+    var r1 = applyRevisionStep(v, idx, 1);
+    var r2 = applyRevisionStep(r1, idx, 2);
+    var r3 = applyRevisionStep(r2, idx, 3);
+    var r4 = applyRevisionStep(r3, idx, 4);
+    if (revisionNo === 1) return r1;
+    if (revisionNo === 2) return r2;
+    if (revisionNo === 3) return r3;
+    return r4;
+  }
+
+  function generatorSupplyRevisionPair(baseGenMwh, slotIndex, revisionNo) {
+    var idx = parseInt(slotIndex, 10) || 0;
+    var v = num(baseGenMwh);
+    var r1 = applyRevisionStep(v, idx, 1);
+    var r2 = applyRevisionStep(r1, idx, 2);
+    var r3 = applyRevisionStep(r2, idx, 3);
+    var r4 = applyRevisionStep(r3, idx, 4);
+    if (revisionNo === 1) return { revised: r1, previous: v };
+    if (revisionNo === 2) return { revised: r2, previous: r1 };
+    if (revisionNo === 3) return { revised: r3, previous: r2 };
+    return { revised: r4, previous: r3 };
+  }
+
+  function lockedSlotCutoffForToday(dateStr) {
+    var now = new Date();
+    if (dateStr !== toDateStr(now)) return 0;
+    var mins = now.getHours() * 60 + now.getMinutes();
+    var nextQuarterMins = (Math.floor(mins / 15) + 1) * 15;
+    if (nextQuarterMins > 24 * 60) nextQuarterMins = 24 * 60;
+    return Math.min(96, Math.max(0, Math.floor(nextQuarterMins / 15)));
+  }
+
+  function classifySlotState(slotIndex, dateStr, revisionNo, revisedGen, previousGen) {
+    var idx = parseInt(slotIndex, 10) || 0;
+    if (idx <= lockedSlotCutoffForToday(dateStr)) return 'approved';
+    if (revisionNo >= 2) {
+      if (Math.abs(num(revisedGen) - num(previousGen)) < 0.01) return 'approved';
+      return 'revised';
+    }
+    return '';
+  }
+
+  function formatDifference(v) {
+    var n = Number(v);
+    if (Number.isNaN(n)) return '0.0';
+    if (Math.abs(n) < 0.02) return '0.0';
+    var rounded = Math.round(n * 10) / 10;
+    if (rounded === 0) return '0.0';
+    return rounded.toFixed(1);
+  }
+
+  function slotHourFromIndex(slotIndex) {
+    var si = parseInt(slotIndex, 10);
+    if (Number.isNaN(si)) return 0;
+    return Math.min(23, Math.max(0, Math.floor((si - 1) / 4)));
+  }
+
+  var slotsTbody = document.getElementById('slotsTable').querySelector('tbody');
+  var totalDemandEl = document.getElementById('totalDemand');
+  var backBtn = document.getElementById('backBtn');
+  var backBtnLabel = document.getElementById('backBtnLabel');
+  var consumersTableBody = document.getElementById('consumersTable').querySelector('tbody');
+  var consumersListSection = document.getElementById('consumersListSection');
+  var approvedDaysSection = document.getElementById('approvedDaysSection');
+  var consumerDemandSection = document.getElementById('consumerDemandSection');
+  var demandPageIntro = document.getElementById('demandPageIntro');
+
+  var selectedConsumerManagerUserId = null;
+  var slotViewControlsWired = false;
+  var approvedDaysWindowSelectWired = false;
+
+  var params = new URLSearchParams(window.location.search);
+  var dateParam = params.get('date');
+  var cmUserIdParam = params.get('cm_user_id');
+  var allowedDates = buildAllowedDates();
+  var allowedSet = {};
+  allowedDates.forEach(function (x) {
+    allowedSet[x.dateStr] = true;
+  });
+  var dateStrForPage = dateParam && allowedSet[dateParam] ? dateParam : allowedDates[0].dateStr;
+
+  function currentDateStr() {
+    var p = new URLSearchParams(window.location.search);
+    if (p.get('cm_user_id') && p.get('date')) return p.get('date');
+    return dateStrForPage;
+  }
+
+  function currentRevisionNo() {
+    var p = new URLSearchParams(window.location.search);
+    var r = parseInt(p.get('revision'), 10);
+    if (r >= 1 && r <= 4) return r;
+    return 4;
+  }
+
+  function demandDetailUrl(cm, dateStr, revisionNo) {
+    var rev = revisionNo >= 1 && revisionNo <= 4 ? revisionNo : 4;
+    return (
+      '/generator-demand/?cm_user_id=' +
+      encodeURIComponent(cm) +
+      '&date=' +
+      encodeURIComponent(dateStr) +
+      '&revision=' +
+      encodeURIComponent(String(rev))
+    );
+  }
+
+  /** Intermediate list view: energy manager + which calendar day in the window (defaults to today). */
+  function approvedListUrl(cm, dayStr) {
+    return (
+      '/generator-demand/?cm_user_id=' + encodeURIComponent(cm) + '&day=' + encodeURIComponent(dayStr || '')
+    );
+  }
+
+  function populateApprovedDaysWindowSelect() {
+    var sel = document.getElementById('approvedDaysWindowSelect');
+    if (!sel) return null;
+    var allowed = buildAllowedDates();
+    if (!allowed.length) return null;
+    var todayStr = allowed[0].dateStr;
+    var p = new URLSearchParams(window.location.search);
+    var fromUrl = p.get('day');
+    var preferred =
+      fromUrl && allowed.some(function (x) {
+        return x.dateStr === fromUrl;
+      })
+        ? fromUrl
+        : todayStr;
+    sel.innerHTML = allowed
+      .map(function (d) {
+        return (
+          '<option value="' +
+          escapeHtml(d.dateStr) +
+          '">' +
+          escapeHtml(d.label + ' (' + d.dateStr + ')') +
+          '</option>'
+        );
+      })
+      .join('');
+    sel.value = preferred;
+    return preferred;
+  }
+
+  function wireApprovedDaysWindowSelectOnce() {
+    if (approvedDaysWindowSelectWired) return;
+    var sel = document.getElementById('approvedDaysWindowSelect');
+    if (!sel) return;
+    approvedDaysWindowSelectWired = true;
+    sel.addEventListener('change', function () {
+      var cm = selectedConsumerManagerUserId;
+      if (!cm) return;
+      window.history.replaceState({}, '', approvedListUrl(cm, sel.value));
+      loadApprovedDaysList(cm);
+    });
+  }
+
+  function fmtDayLabel(dateStr) {
+    var d = new Date(dateStr + 'T12:00:00');
+    return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  }
+
+  async function loadDayStatusForConsumer(cmUserId, dateStr) {
+    var res = await fetchWithAuth(
+      '/api/generator/supply/?consumer_manager_user_id=' + encodeURIComponent(cmUserId) + '&date=' + encodeURIComponent(dateStr)
+    );
+    var data = await res.json().catch(function () {
+      return {};
+    });
+    if (!res.ok) return { ok: false, detail: data.detail || 'Failed' };
+    return {
+      ok: true,
+      energy_manager_name: data.energy_manager_name || '',
+      allocation_approved: !!data.allocation_approved,
+    };
+  }
+
+  async function loadApprovedDaysList(cmUserId) {
+    setStatus('Loading approved days…');
+    wireApprovedDaysWindowSelectOnce();
+    var selectedDate = populateApprovedDaysWindowSelect();
+    if (!selectedDate) {
+      setStatus('');
+      return;
+    }
+
+    var pUrl = new URLSearchParams(window.location.search);
+    if (!pUrl.get('day')) {
+      window.history.replaceState({}, '', approvedListUrl(cmUserId, selectedDate));
+    }
+
+    var tbody = document.getElementById('approvedDaysTableBody');
+    var labelEl = document.getElementById('approvedDaysEnergyManagerLabel');
+    if (labelEl) labelEl.textContent = '';
+    tbody.innerHTML =
+      '<tr><td colspan="4" class="text-muted py-3">Loading…</td></tr>';
+
+    var st = await loadDayStatusForConsumer(cmUserId, selectedDate);
+    var energyName = st.ok ? st.energy_manager_name || '' : '';
+
+    if (labelEl) {
+      labelEl.textContent = energyName ? 'Energy manager: ' + energyName : '';
+    }
+
+    if (!st.ok) {
+      tbody.innerHTML =
+        '<tr><td colspan="4" class="text-danger py-3">Could not load status for this day. ' +
+        escapeHtml(st.detail || '') +
+        '</td></tr>';
+      setStatus('');
+      return;
+    }
+
+    if (!st.allocation_approved) {
+      tbody.innerHTML =
+        '<tr><td colspan="4" class="text-muted py-3">No approved allocation for <strong class="text-dark">' +
+        escapeHtml(fmtDayLabel(selectedDate)) +
+        '</strong> (' +
+        escapeHtml(selectedDate) +
+        '). Choose another day or wait until the energy manager approves.</td></tr>';
+      setStatus('');
+      return;
+    }
+
+    var rowsHtml = [];
+    for (var rev = 1; rev <= 4; rev++) {
+      rowsHtml.push(
+        '<tr>' +
+          '<td><span class="fw-semibold">' +
+          escapeHtml(fmtDayLabel(selectedDate)) +
+          '</span><br><small class="text-muted">' +
+          escapeHtml(selectedDate) +
+          '</small></td>' +
+          '<td><span class="fw-semibold">' +
+          (rev === 4 ? 'Latest revision' : 'Revision ' + rev) +
+          '</span></td>' +
+          '<td><span class="badge bg-success">Approved</span></td>' +
+          '<td><button type="button" class="btn btn-sm btn-primary btnOpenSlotView" data-date="' +
+          escapeHtml(selectedDate) +
+          '" data-revision="' +
+          rev +
+          '"><span class="btn-label"><i class="fas fa-eye"></i></span> View</button></td>' +
+          '</tr>'
+      );
+    }
+    tbody.innerHTML = rowsHtml.join('');
+
+    tbody.querySelectorAll('.btnOpenSlotView').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var ds = btn.getAttribute('data-date');
+        var rev = parseInt(btn.getAttribute('data-revision'), 10) || 4;
+        window.location.href = demandDetailUrl(cmUserId, ds, rev);
+      });
+    });
+
+    setStatus('');
+  }
+
+  async function loadConsumerManagers() {
+    var dateStr = currentDateStr();
+    if (!dateStr) return;
+    setStatus('Loading consumer managers…');
+    var res = await fetchWithAuth(
+      '/api/generator/consumer-managers/?date=' + encodeURIComponent(dateStr) + '&allocation_approved_only=1'
+    );
+    var data = await res.json().catch(function () {
+      return {};
+    });
+    if (!res.ok) {
+      consumersTableBody.innerHTML =
+        '<tr><td colspan="2" class="text-danger py-3">Failed to load. ' + escapeHtml(data.detail || '') + '</td></tr>';
+      setStatus(data.detail || 'Failed to load');
+      return;
+    }
+    var items = data.results || [];
+
+    if (items.length === 0) {
+      consumersTableBody.innerHTML =
+        '<tr><td colspan="2" class="text-muted py-3">No energy managers with approved allocation for this planning day.</td></tr>';
+      setStatus('No consumers have approved their demand for generator visibility for this date.');
+      return;
+    }
+
+    consumersTableBody.innerHTML = items
+      .map(function (c, idx) {
+        var em = c.energy_manager_name || c.consumer_name || '';
+        var ini = initials(em);
+        var avClass = idx % 2 === 1 ? 'kai-demand-avatar alt' : 'kai-demand-avatar bg-primary';
+        return (
+          '<tr>' +
+          '<td>' +
+          '<div class="d-flex align-items-center">' +
+          '<div class="' +
+          avClass +
+          '">' +
+          escapeHtml(ini) +
+          '</div>' +
+          '<div class="ms-3 min-w-0">' +
+          '<div class="fw-bold text-dark text-truncate" style="max-width: 280px">' +
+          escapeHtml(em) +
+          '</div>' +
+          '<small class="text-muted">Approved allocation</small>' +
+          '</div>' +
+          '</div>' +
+          '</td>' +
+          '<td class="text-end">' +
+          '<button class="btn btn-sm btn-primary" type="button" data-cm-user-id="' +
+          c.consumer_manager_user_id +
+          '">' +
+          '<span class="btn-label"><i class="fas fa-th-list"></i></span> View allocations' +
+          '</button>' +
+          '</td>' +
+          '</tr>'
+        );
+      })
+      .join('');
+
+    consumersTableBody.querySelectorAll('button[data-cm-user-id]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var cmId = btn.getAttribute('data-cm-user-id');
+        window.location.href = '/generator-demand/?cm_user_id=' + encodeURIComponent(cmId);
+      });
+    });
+    setStatus('');
+  }
+
+  function populateSlotViewDaySelect() {
+    var sel = document.getElementById('slotViewDaySelect');
+    if (!sel) return;
+    var allowed = buildAllowedDates();
+    sel.innerHTML = allowed
+      .map(function (d) {
+        var label = d.label + ' (' + d.dateStr + ')';
+        return '<option value="' + d.dateStr + '">' + escapeHtml(label) + '</option>';
+      })
+      .join('');
+    var cur = currentDateStr();
+    if (cur && allowedSet[cur]) sel.value = cur;
+    else sel.value = allowed[0].dateStr;
+  }
+
+  function populateHourFilterOptions() {
+    var hourSel = document.getElementById('slotViewHourFilter');
+    if (!hourSel) return;
+    var keep = hourSel.value;
+    hourSel.innerHTML = '<option value="">All hours</option>';
+    for (var h = 0; h < 24; h++) {
+      var hh = String(h).padStart(2, '0');
+      var opt = document.createElement('option');
+      opt.value = String(h);
+      opt.textContent = 'Hour ' + hh + ' (' + hh + ':00 – ' + hh + ':45)';
+      hourSel.appendChild(opt);
+    }
+    if (keep !== '' && hourSel.querySelector('option[value="' + keep + '"]')) {
+      hourSel.value = keep;
+    }
+  }
+
+  function applyHourFilter() {
+    var hourSel = document.getElementById('slotViewHourFilter');
+    var hint = document.getElementById('slotViewHourHint');
+    var wrap = document.getElementById('slotViewSlotsScrollWrap');
+    if (!hourSel || !slotsTbody) return;
+    var v = hourSel.value;
+    var rows = slotsTbody.querySelectorAll('tr[data-hour]');
+    rows.forEach(function (tr) {
+      if (v === '') tr.classList.remove('d-none');
+      else tr.classList.toggle('d-none', tr.getAttribute('data-hour') !== v);
+    });
+    if (hint) {
+      if (v === '') hint.textContent = 'All 96 quarter-hour slots.';
+      else
+        hint.textContent =
+          'Showing hour ' + v + ' only (4 slots). Choose All hours for the full day.';
+    }
+    if (v !== '' && wrap) {
+      var first = slotsTbody.querySelector('tr[data-hour="' + v + '"]');
+      if (first) first.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    }
+  }
+
+  function wireSlotViewControls() {
+    if (slotViewControlsWired) return;
+    slotViewControlsWired = true;
+    var daySel = document.getElementById('slotViewDaySelect');
+    var hourSel = document.getElementById('slotViewHourFilter');
+    var revisionSel = document.getElementById('slotViewRevisionSelect');
+    if (revisionSel) {
+      revisionSel.addEventListener('change', function () {
+        var cm = selectedConsumerManagerUserId;
+        var ds = daySel ? daySel.value : currentDateStr();
+        if (!cm || !ds) return;
+        var rev = parseInt(revisionSel.value, 10) || 4;
+        if (hourSel) hourSel.value = '';
+        window.history.replaceState({}, '', demandDetailUrl(cm, ds, rev));
+        loadSlots();
+      });
+    }
+    if (daySel) {
+      daySel.addEventListener('change', function () {
+        var cm = selectedConsumerManagerUserId;
+        var ds = daySel.value;
+        if (!cm || !ds) return;
+        if (hourSel) hourSel.value = '';
+        var rev = revisionSel ? parseInt(revisionSel.value, 10) || 4 : currentRevisionNo();
+        window.history.replaceState({}, '', demandDetailUrl(cm, ds, rev));
+        loadSlots();
+      });
+    }
+    if (hourSel) {
+      hourSel.addEventListener('change', applyHourFilter);
+    }
+  }
+
+  async function loadSlots() {
+    var dateStr = currentDateStr();
+    if (!selectedConsumerManagerUserId || !dateStr) return;
+
+    setStatus('Loading schedule…');
+    var res = await fetchWithAuth(
+      '/api/generator/approved-allocation-slots/?consumer_manager_user_id=' +
+        encodeURIComponent(selectedConsumerManagerUserId) +
+        '&date=' +
+        encodeURIComponent(dateStr)
+    );
+    var data = await res.json().catch(function () {
+      return {};
+    });
+    if (!res.ok) {
+      slotsTbody.innerHTML =
+        '<tr><td colspan="99" class="text-danger py-3">Failed to load. ' + escapeHtml(data.detail || '') + '</td></tr>';
+      setStatus(data.detail || 'Failed to load');
+      return;
+    }
+
+    var slots = data.slots || [];
+    var plants = data.plants || [];
+    var revisionNo = currentRevisionNo();
+
+    var revSel = document.getElementById('slotViewRevisionSelect');
+    if (revSel) revSel.value = String(revisionNo);
+
+    var theadTr = document.getElementById('slotsTheadRow');
+    if (theadTr) {
+      theadTr.innerHTML =
+        '<th style="min-width:56px">Slot</th>' +
+        '<th style="min-width:120px">Time</th>' +
+        '<th style="min-width:100px">Gen supply</th>' +
+        plants
+          .map(function (p) {
+            return '<th style="min-width:90px">' + escapeHtml(p.plant_name) + '</th>';
+          })
+          .join('') +
+        '<th style="min-width:90px">IEX / bal.</th>' +
+        '<th style="min-width:100px">Total acct.</th>' +
+        '<th style="min-width:72px">Diff</th>';
+    }
+
+    slotsTbody.innerHTML = '';
+
+    var totalSupply = 0;
+    slots.forEach(function (s) {
+      var baseGen = num(s.generator_supply_mwh || 0);
+      var revPair = generatorSupplyRevisionPair(baseGen, s.slot_index, revisionNo);
+      var genSupply = revPair.revised;
+      totalSupply += genSupply;
+      var plantTotal = Number(s.total_mwh || 0);
+      var iex = Number(s.iex_mwh != null && s.iex_mwh !== '' ? s.iex_mwh : Math.max(0, genSupply - plantTotal));
+      var accounted = Number(
+        s.total_accounted_mwh != null && s.total_accounted_mwh !== '' ? s.total_accounted_mwh : plantTotal + iex
+      );
+      var diff = accounted - genSupply;
+      var diffCls = diff > 0.02 ? 'text-success fw-semibold' : diff < -0.02 ? 'text-danger fw-semibold' : 'text-muted';
+      var byPlant = {};
+      (s.allocations || []).forEach(function (a) {
+        byPlant[String(a.plant_id)] = a.mwh;
+      });
+      var tr = document.createElement('tr');
+      var slotState = classifySlotState(s.slot_index, dateStr, revisionNo, genSupply, revPair.previous);
+      if (slotState === 'approved') tr.classList.add('kai-slot-approved');
+      if (slotState === 'revised') tr.classList.add('kai-slot-revised');
+      tr.setAttribute('data-hour', String(slotHourFromIndex(s.slot_index)));
+      tr.innerHTML =
+        '<td class="text-muted">' +
+        escapeHtml(String(s.slot_index)) +
+        '</td>' +
+        '<td><span class="fw-semibold text-primary">' +
+        escapeHtml(String(s.time_block || s.slot_time || '')) +
+        '</span></td>' +
+        '<td>' +
+        escapeHtml(formatFloat(genSupply)) +
+        '</td>' +
+        plants
+          .map(function (p) {
+            return '<td>' + escapeHtml(formatFloat(byPlant[String(p.plant_id)] || 0)) + '</td>';
+          })
+          .join('') +
+        '<td>' +
+        escapeHtml(formatFloat(iex)) +
+        '</td>' +
+        '<td><strong>' +
+        escapeHtml(formatFloat(accounted)) +
+        '</strong></td>' +
+        '<td class="' +
+        diffCls +
+        '">' +
+        escapeHtml(formatDifference(diff)) +
+        '</td>';
+      slotsTbody.appendChild(tr);
+    });
+
+    totalDemandEl.textContent = formatFloat(totalSupply);
+
+    populateHourFilterOptions();
+    applyHourFilter();
+
+    setStatus('');
+  }
+
+  function wireBackButtonForDetail(cm) {
+    if (backBtnLabel) backBtnLabel.textContent = 'Back to approved days';
+    backBtn.onclick = function () {
+      var ds = currentDateStr();
+      window.location.href = approvedListUrl(cm, ds);
+    };
+  }
+
+  function wireBackButtonForIntermediate() {
+    if (backBtnLabel) backBtnLabel.textContent = 'Back to energy managers';
+    backBtn.onclick = function () {
+      window.location.href = '/generator-demand/';
+    };
+  }
+
+  function boot() {
+    var p = new URLSearchParams(window.location.search);
+    var cm = p.get('cm_user_id');
+    var dt = p.get('date');
+
+    if (cm && dt) {
+      selectedConsumerManagerUserId = cm;
+      consumersListSection.classList.add('d-none');
+      if (approvedDaysSection) approvedDaysSection.classList.add('d-none');
+      consumerDemandSection.classList.remove('d-none');
+      if (demandPageIntro) demandPageIntro.classList.add('d-none');
+      backBtn.classList.remove('d-none');
+      wireBackButtonForDetail(cm);
+      populateSlotViewDaySelect();
+      wireSlotViewControls();
+      var p0 = new URLSearchParams(window.location.search);
+      if (!p0.get('revision')) {
+        window.history.replaceState({}, '', demandDetailUrl(cm, dt, currentRevisionNo()));
+      }
+      loadSlots();
+    } else if (cm) {
+      selectedConsumerManagerUserId = cm;
+      consumersListSection.classList.add('d-none');
+      if (approvedDaysSection) approvedDaysSection.classList.remove('d-none');
+      consumerDemandSection.classList.add('d-none');
+      if (demandPageIntro) demandPageIntro.classList.remove('d-none');
+      backBtn.classList.remove('d-none');
+      wireBackButtonForIntermediate();
+      loadApprovedDaysList(cm);
+    } else {
+      consumersListSection.classList.remove('d-none');
+      if (approvedDaysSection) approvedDaysSection.classList.add('d-none');
+      consumerDemandSection.classList.add('d-none');
+      if (demandPageIntro) demandPageIntro.classList.remove('d-none');
+      backBtn.classList.add('d-none');
+      loadConsumerManagers();
+    }
+  }
+
+  boot();
+})();
+</script>
+{% endblock %}

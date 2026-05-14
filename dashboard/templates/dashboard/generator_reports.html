@@ -1,0 +1,1570 @@
+{% extends "dashboard/generator_base_kaiadmin.html" %}
+
+{% block title %}Reports — ViewMetric (Generator){% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  .kai-reports-chart-box { min-height: 280px; position: relative; }
+  .kai-reports-section .card-head-row { align-items: flex-start; }
+  @media (min-width: 768px) {
+    .kai-reports-section .card-head-row { align-items: center; }
+  }
+  .kai-reports-section-card {
+    border: 1px solid rgba(21, 114, 232, 0.18);
+    box-shadow: 0 6px 24px rgba(21, 114, 232, 0.1);
+    overflow: hidden;
+  }
+  .kai-reports-gradient-header {
+    background: linear-gradient(135deg, #1572e8 0%, #1269db 48%, #0d5bbd 100%) !important;
+    border: none !important;
+    padding-top: 1rem !important;
+    padding-bottom: 1rem !important;
+    box-shadow: 0 3px 12px rgba(21, 114, 232, 0.35);
+  }
+  .kai-reports-gradient-header .card-title {
+    color: #fff !important;
+    font-weight: 700;
+  }
+  .kai-reports-gradient-header .text-muted {
+    color: rgba(255, 255, 255, 0.88) !important;
+  }
+  .kai-reports-control {
+    min-height: calc(1.5em + 0.5rem + 2px);
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    background: rgba(255, 255, 255, 0.96);
+    border-radius: 8px;
+    font-weight: 600;
+    color: #1a1d2e;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  }
+  .kai-reports-control:focus {
+    border-color: #fff;
+    background: #fff;
+    box-shadow: 0 0 0 0.2rem rgba(255, 255, 255, 0.45);
+    outline: none;
+  }
+  .kai-reports-chart-inner {
+    border-radius: 12px;
+    border: 1px solid rgba(21, 114, 232, 0.15);
+    background: #fff;
+    padding: 1rem 1rem 0.5rem;
+    box-shadow: inset 0 1px 0 rgba(21, 114, 232, 0.06);
+  }
+  .kai-edit-slots-wrap.kai-reports-table-wrap {
+    max-height: none;
+    box-shadow: 0 4px 18px rgba(21, 114, 232, 0.08);
+  }
+  .kai-edit-slots-table {
+    margin-bottom: 0;
+    --bs-table-striped-bg: rgba(21, 114, 232, 0.055);
+    --bs-table-hover-bg: rgba(21, 114, 232, 0.12);
+    border-color: transparent;
+  }
+  .kai-edit-slots-table thead th {
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: #fff !important;
+    border: none !important;
+    padding-top: 0.75rem !important;
+    padding-bottom: 0.75rem !important;
+    background: linear-gradient(135deg, #1572e8 0%, #1269db 48%, #0d5bbd 100%) !important;
+    box-shadow: 0 2px 8px rgba(21, 114, 232, 0.25);
+  }
+  .kai-edit-slots-table tbody td {
+    vertical-align: middle;
+    border-color: rgba(21, 114, 232, 0.1);
+  }
+  .kai-reports-grid-card {
+    border: 1px solid rgba(21, 114, 232, 0.18);
+    box-shadow: 0 4px 16px rgba(21, 114, 232, 0.08);
+    overflow: hidden;
+  }
+  .kai-reports-gradient-header .btn-label-primary {
+    background: rgba(255, 255, 255, 0.22);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    color: #fff !important;
+  }
+  .kai-reports-gradient-header .btn-label-primary:hover {
+    background: rgba(255, 255, 255, 0.35);
+    color: #fff !important;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+            <div class="mb-4 pt-2">
+              <div class="page-pretitle">Reports</div>
+              <h3 class="fw-bold mb-2">Generator reports</h3>
+              <p id="reportsScope" class="text-muted mb-0" style="max-width: 42rem">Loading…</p>
+            </div>
+
+            <div id="reportsError" class="alert alert-danger d-none mb-4" role="alert"></div>
+
+            <div id="reportsContent" class="d-none">
+              <div class="card card-round mb-4 kai-reports-section kai-reports-section-card">
+                <div class="card-header kai-reports-gradient-header border-0">
+                  <div class="card-head-row flex-wrap gap-3">
+                    <div>
+                      <div class="card-title mb-0">Allocation section</div>
+                      <small class="text-muted d-block mt-1" style="max-width: 36rem">Same approved-allocation logic as Allocation view. Daily totals: <strong class="text-white">approved allocation</strong> (bars) vs <strong class="text-white">generator supply</strong> and <strong class="text-white">IEX sellings</strong> (lines).</small>
+                    </div>
+                    <div class="card-tools d-flex flex-wrap align-items-center gap-2">
+                      <label class="visually-hidden" for="fromDate-allocation">From date</label>
+                      <input type="date" id="fromDate-allocation" class="form-control form-control-sm kai-reports-control" />
+                      <label class="visually-hidden" for="toDate-allocation">To date</label>
+                      <input type="date" id="toDate-allocation" class="form-control form-control-sm kai-reports-control" />
+                      <label class="visually-hidden" for="view-allocation">View</label>
+                      <select id="view-allocation" class="form-select form-select-sm kai-reports-control" style="width: auto; min-width: 7.5rem">
+                        <option value="graph" selected>Histogram</option>
+                        <option value="table">Table</option>
+                        <option value="grid">Grid</option>
+                      </select>
+                      <button type="button" id="exportBtn-allocation" class="btn btn-label-primary btn-sm" title="Download CSV for selected dates">
+                        <span class="btn-label"><i class="fas fa-file-download"></i></span>
+                        Export
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <p id="rangeHint-allocation" class="text-muted small mb-3" aria-live="polite"></p>
+                  <div class="kai-reports-chart-inner mb-2">
+                    <div id="allocation-graph" class="kai-reports-chart-box">
+                      <canvas id="allocationChart"></canvas>
+                    </div>
+                  </div>
+                  <div id="allocation-table" class="d-none kai-edit-slots-wrap kai-reports-table-wrap table-responsive mt-3">
+                    <table class="table table-striped table-hover table-sm align-middle kai-edit-slots-table mb-0">
+                      <thead>
+                        <tr id="allocationTheadRow"></tr>
+                      </thead>
+                      <tbody id="allocationTableBody"></tbody>
+                    </table>
+                  </div>
+                  <div id="allocation-grid" class="row g-3 d-none mt-1"></div>
+                </div>
+              </div>
+
+              <div class="card card-round mb-4 kai-reports-section kai-reports-section-card">
+                <div class="card-header kai-reports-gradient-header border-0">
+                  <div class="card-head-row flex-wrap gap-3">
+                    <div>
+                      <div class="card-title mb-0">Day view (15-min slots)</div>
+                      <small class="text-muted d-block mt-1" style="max-width: 40rem">
+                        One calendar day, one plant. <strong class="text-white">Approved allocation</strong> (bars) vs
+                        <strong class="text-white">generator supply</strong> and <strong class="text-white">IEX sellings</strong> (lines; per-slot totals for this consumer). Any calendar date with approved allocation for that day — 96 quarter-hour slots.
+                      </small>
+                    </div>
+                    <div class="card-tools d-flex flex-wrap align-items-center gap-2">
+                      <label class="visually-hidden" for="slotDayDate">Day</label>
+                      <input type="date" id="slotDayDate" class="form-control form-control-sm kai-reports-control" />
+                      <label class="visually-hidden" for="slotDayCmSelect">Energy manager</label>
+                      <select id="slotDayCmSelect" class="form-select form-select-sm kai-reports-control" style="min-width: 13rem" aria-label="Energy manager">
+                        <option value="">Loading…</option>
+                      </select>
+                      <label class="visually-hidden" for="slotDayPlantSelect">Plant</label>
+                      <select id="slotDayPlantSelect" class="form-select form-select-sm kai-reports-control" style="min-width: 11rem" aria-label="Plant">
+                        <option value="">—</option>
+                      </select>
+                      <button type="button" id="exportBtn-slotDay" class="btn btn-label-primary btn-sm" title="Download CSV for this day, plant, and energy manager">
+                        <span class="btn-label"><i class="fas fa-file-download"></i></span>
+                        Export
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <p id="slotDayHint" class="text-muted small mb-2" aria-live="polite"></p>
+                  <p id="slotDayStatus" class="text-danger small mb-2 d-none" role="alert"></p>
+                  <div class="kai-reports-chart-inner mb-2">
+                    <div id="slotDay-graph" class="kai-reports-chart-box" style="min-height: 320px">
+                      <canvas id="slotDayChart"></canvas>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="card card-round mb-4 kai-reports-section kai-reports-section-card">
+                <div class="card-header kai-reports-gradient-header border-0">
+                  <div class="card-head-row flex-wrap gap-3">
+                    <div>
+                      <div class="card-title mb-0">Scheduled vs revisions (day-wise)</div>
+                      <small class="text-muted d-block mt-1" style="max-width: 40rem">
+                        One calendar day, one energy manager. Compare approved allocation against selected revision (submitted/revision 1-4) across all 96 slots.
+                      </small>
+                    </div>
+                    <div class="card-tools d-flex flex-wrap align-items-center gap-2">
+                      <label class="visually-hidden" for="genRevisionDate">Day</label>
+                      <input type="date" id="genRevisionDate" class="form-control form-control-sm kai-reports-control" />
+                      <label class="visually-hidden" for="genRevisionCmSelect">Energy manager</label>
+                      <select id="genRevisionCmSelect" class="form-select form-select-sm kai-reports-control" style="min-width: 13rem" aria-label="Energy manager">
+                        <option value="">Loading…</option>
+                      </select>
+                      <label class="visually-hidden" for="genRevisionMode">Revision</label>
+                      <select id="genRevisionMode" class="form-select form-select-sm kai-reports-control" style="min-width: 10rem" aria-label="Revision mode">
+                        <option value="revision4" selected>Revision 4</option>
+                        <option value="revision3">Revision 3</option>
+                        <option value="revision2">Revision 2</option>
+                        <option value="revision1">Revision 1</option>
+                        <option value="submitted">Submitted</option>
+                      </select>
+                      <label class="visually-hidden" for="view-genRevision">View</label>
+                      <select id="view-genRevision" class="form-select form-select-sm kai-reports-control" style="width: auto; min-width: 7.5rem">
+                        <option value="graph" selected>Graph</option>
+                        <option value="table">Table</option>
+                        <option value="grid">Grid</option>
+                      </select>
+                      <button type="button" id="exportBtn-genRevision" class="btn btn-label-primary btn-sm" title="Download CSV for selected date and revision">
+                        <span class="btn-label"><i class="fas fa-file-download"></i></span>
+                        Export
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <p id="genRevisionHint" class="text-muted small mb-3" aria-live="polite"></p>
+                  <p id="genRevisionStatus" class="text-danger small mb-2 d-none" role="alert"></p>
+                  <div class="kai-reports-chart-inner mb-2">
+                    <div id="genRevision-graph" class="kai-reports-chart-box">
+                      <canvas id="genRevisionChart"></canvas>
+                    </div>
+                  </div>
+                  <div id="genRevision-table" class="d-none kai-edit-slots-wrap kai-reports-table-wrap table-responsive mt-3">
+                    <table class="table table-striped table-hover table-sm align-middle kai-edit-slots-table mb-0">
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>Revision</th>
+                          <th>Approved allocation (MWh)</th>
+                          <th>Selected revision supply (MWh)</th>
+                          <th>Difference (MWh)</th>
+                        </tr>
+                      </thead>
+                      <tbody id="genRevisionTableBody"></tbody>
+                    </table>
+                  </div>
+                  <div id="genRevision-grid" class="row g-3 d-none mt-1"></div>
+                </div>
+              </div>
+            </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+  var fetchWithAuth = window.kaiFetchWithAuth;
+  if (!fetchWithAuth) return;
+
+  var KAI_PRIMARY = '#1572e8';
+  var KAI_PRIMARY_FILL = 'rgba(21, 114, 232, 0.78)';
+  var KAI_SECONDARY = '#f3545d';
+  var KAI_SECONDARY_FILL = 'rgba(243, 84, 93, 0.75)';
+  var KAI_GOLD = '#E8B84C';
+  var KAI_GOLD_FILL = 'rgba(232, 184, 76, 0.78)';
+  var KAI_IEX = '#22c55e';
+  var KAI_IEX_FILL = 'rgba(34, 197, 94, 0.15)';
+
+  var SECTIONS = ['allocation'];
+
+  var histogramBarOptions = {
+    categoryPercentage: 0.98,
+    barPercentage: 0.92,
+    borderRadius: 4,
+    borderSkipped: false,
+  };
+
+  window.switchView = function (section, view) {
+    ['graph', 'table', 'grid'].forEach(function (v) {
+      var el = document.getElementById(section + '-' + v);
+      if (el) el.classList.toggle('d-none', v !== view);
+    });
+  };
+
+  var charts = { allocation: null, slotDay: null, genRevision: null };
+  var SLOT_DAY_OVERALL = '__overall__';
+  var sectionData = {};
+  var slotDayCache = {
+    date: '',
+    cmId: '',
+    plantId: '',
+    plantName: '',
+    consumerName: '',
+    slots: [],
+    plants: [],
+  };
+  var genRevisionCache = {
+    date: '',
+    cmId: '',
+    mode: 'revision4',
+    rows: [],
+    energyManagerName: '',
+  };
+
+  function num(v) {
+    var n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function applyRevisionStep(baseVal, slotIndex, revisionNo) {
+    var v = num(baseVal);
+    var idx = parseInt(slotIndex, 10) || 0;
+    var pct;
+    var bias;
+    if (revisionNo === 1) {
+      pct = ((idx % 9) - 4) / 100;
+      bias = ((idx % 4) - 1.5) * 0.03;
+    } else if (revisionNo === 2) {
+      pct = ((idx % 11) - 5) / 90;
+      bias = ((idx % 5) - 2) * 0.04 + 0.05;
+    } else if (revisionNo === 3) {
+      pct = ((idx % 10) - 4.5) / 95;
+      bias = ((idx % 6) - 2.5) * 0.033 + 0.02;
+    } else {
+      pct = ((idx % 12) - 5.5) / 95;
+      bias = ((idx % 7) - 3) * 0.036 + 0.03;
+    }
+    var out = v * (1 + pct) + bias;
+    return Math.max(0, num(out.toFixed(2)));
+  }
+
+  function supplyAtRevision(baseSupply, slotIndex, mode) {
+    var s0 = num(baseSupply);
+    var r1 = applyRevisionStep(s0, slotIndex, 1);
+    var r2 = applyRevisionStep(r1, slotIndex, 2);
+    var r3 = applyRevisionStep(r2, slotIndex, 3);
+    var r4 = applyRevisionStep(r3, slotIndex, 4);
+    if (mode === 'submitted') return s0;
+    if (mode === 'revision1') return r1;
+    if (mode === 'revision2') return r2;
+    if (mode === 'revision3') return r3;
+    return r4;
+  }
+
+  function generatorRevisionLabel(mode) {
+    if (mode === 'submitted') return 'Submitted';
+    if (mode === 'revision1') return 'Revision 1';
+    if (mode === 'revision2') return 'Revision 2';
+    if (mode === 'revision3') return 'Revision 3';
+    return 'Revision 4';
+  }
+
+  function tomorrowIsoDate() {
+    var d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().split('T')[0];
+  }
+
+  function plantMwhFromSlot(slot, plantId) {
+    var pid = parseInt(plantId, 10);
+    if (Number.isNaN(pid)) return 0;
+    var alloc = slot.allocations || [];
+    for (var i = 0; i < alloc.length; i++) {
+      if (parseInt(alloc[i].plant_id, 10) === pid) return parseFloat(alloc[i].mwh) || 0;
+    }
+    return 0;
+  }
+
+  function scheduledMwhForSlot(slot, plantId) {
+    if (plantId === SLOT_DAY_OVERALL) {
+      return parseFloat(slot.total_mwh) || 0;
+    }
+    return plantMwhFromSlot(slot, plantId);
+  }
+
+  function destroySlotDayChart() {
+    try {
+      if (charts.slotDay) charts.slotDay.destroy();
+    } catch (e) {}
+    charts.slotDay = null;
+  }
+
+  function renderSlotDayChartFromCache() {
+    var hintEl = document.getElementById('slotDayHint');
+    var statusEl = document.getElementById('slotDayStatus');
+    var canvas = document.getElementById('slotDayChart');
+    if (!canvas || !slotDayCache.slots.length) {
+      destroySlotDayChart();
+      if (hintEl) hintEl.textContent = '';
+      return;
+    }
+    var plantId = document.getElementById('slotDayPlantSelect').value;
+    if (!plantId) {
+      destroySlotDayChart();
+      if (hintEl) hintEl.textContent = 'Select a plant or Overall (all plants).';
+      return;
+    }
+    if (statusEl) statusEl.classList.add('d-none');
+    var labels = slotDayCache.slots.map(function (s) {
+      return s.time_block || String(s.slot_index);
+    });
+    var sched = slotDayCache.slots.map(function (s) {
+      return scheduledMwhForSlot(s, plantId);
+    });
+    var supply = slotDayCache.slots.map(function (s) {
+      return parseFloat(s.generator_supply_mwh) || 0;
+    });
+    var iexLine = slotDayCache.slots.map(function (s) {
+      return parseFloat(s.iex_mwh) || 0;
+    });
+    var barLabel =
+      plantId === SLOT_DAY_OVERALL ? 'Total approved allocation (MWh)' : 'Approved allocation (MWh)';
+    if (hintEl) {
+      hintEl.textContent =
+        'Showing ' +
+        slotDayCache.slots.length +
+        ' slots for ' +
+        (slotDayCache.plantName || 'plant') +
+        ' · ' +
+        (slotDayCache.consumerName || 'consumer') +
+        ' · ' +
+        slotDayCache.date +
+        (plantId === SLOT_DAY_OVERALL
+          ? '. Bars: total approved allocation per slot (all plants combined). Supply and IEX lines: per-slot totals for this consumer (supply is shared generator output; IEX is balance/sellings).'
+          : '. Supply and IEX lines: per-slot totals for this consumer (supply is shared generator output; IEX is balance/sellings).');
+    }
+    destroySlotDayChart();
+    charts.slotDay = new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            type: 'bar',
+            label: barLabel,
+            data: sched,
+            backgroundColor: KAI_PRIMARY_FILL,
+            borderColor: KAI_PRIMARY,
+            borderWidth: 1,
+            order: 3,
+          },
+          {
+            type: 'line',
+            label: 'Generator supply (MWh)',
+            data: supply,
+            borderColor: KAI_GOLD,
+            backgroundColor: 'rgba(232, 184, 76, 0.15)',
+            borderWidth: 2,
+            fill: false,
+            tension: 0.15,
+            pointRadius: 0,
+            pointHoverRadius: 3,
+            order: 2,
+          },
+          {
+            type: 'line',
+            label: 'IEX sellings (MWh)',
+            data: iexLine,
+            borderColor: KAI_IEX,
+            backgroundColor: KAI_IEX_FILL,
+            borderWidth: 2,
+            fill: false,
+            tension: 0.15,
+            pointRadius: 0,
+            pointHoverRadius: 3,
+            order: 1,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { labels: { color: '#495057' } },
+          tooltip: {
+            callbacks: {
+              title: function (items) {
+                var i = items[0] && items[0].dataIndex;
+                if (i == null) return '';
+                var sl = slotDayCache.slots[i];
+                return sl ? (sl.time_block || '') + ' (slot ' + sl.slot_index + ')' : '';
+              },
+            },
+          },
+        },
+        scales: {
+          x: {
+            ticks: {
+              color: '#6c757d',
+              maxRotation: 90,
+              minRotation: 45,
+              autoSkip: true,
+              maxTicksLimit: 32,
+            },
+            grid: { display: false },
+          },
+          y: {
+            beginAtZero: true,
+            ticks: { color: '#6c757d' },
+            grid: { color: 'rgba(0,0,0,0.06)' },
+            title: { display: true, text: 'MWh', color: '#6c757d' },
+          },
+        },
+      },
+    });
+  }
+
+  async function loadSlotDayEnergyManagers() {
+    var dateEl = document.getElementById('slotDayDate');
+    var cmSel = document.getElementById('slotDayCmSelect');
+    var plantSel = document.getElementById('slotDayPlantSelect');
+    if (!dateEl || !cmSel) return;
+    var date = dateEl.value || tomorrowIsoDate();
+    dateEl.value = date;
+    var prev = cmSel.value;
+    cmSel.innerHTML = '<option value="">Loading…</option>';
+    cmSel.disabled = true;
+    var res = await fetchWithAuth(
+      '/api/generator/consumer-managers/?date=' + encodeURIComponent(date) + '&allocation_approved_only=1'
+    );
+    var data = await res.json().catch(function () {
+      return {};
+    });
+    cmSel.disabled = false;
+    if (!res.ok) {
+      cmSel.innerHTML = '<option value="">' + escapeHtml(data.detail || 'Error') + '</option>';
+      return;
+    }
+    var results = data.results || [];
+    cmSel.innerHTML =
+      '<option value="">Select energy manager</option>' +
+      results
+        .map(function (r) {
+          var id = r.consumer_manager_user_id;
+          var label = r.energy_manager_name || r.consumer_name || r.consumer_manager_email || String(id);
+          return '<option value="' + id + '">' + escapeHtml(label) + '</option>';
+        })
+        .join('');
+    if (prev && cmSel.querySelector('option[value="' + prev + '"]')) cmSel.value = prev;
+    else if (results.length) cmSel.value = String(results[0].consumer_manager_user_id);
+    if (plantSel) plantSel.innerHTML = '<option value="">—</option>';
+    slotDayCache = { date: '', cmId: '', plantId: '', plantName: '', consumerName: '', slots: [], plants: [] };
+    destroySlotDayChart();
+    var hint = document.getElementById('slotDayHint');
+    if (hint && !results.length) hint.textContent = 'No energy managers with approved allocation for this date.';
+    if (cmSel.value) await loadSlotDaySlots();
+  }
+
+  async function loadSlotDaySlots() {
+    var dateEl = document.getElementById('slotDayDate');
+    var cmSel = document.getElementById('slotDayCmSelect');
+    var plantSel = document.getElementById('slotDayPlantSelect');
+    var statusEl = document.getElementById('slotDayStatus');
+    var hintEl = document.getElementById('slotDayHint');
+    if (!dateEl || !cmSel || !plantSel) return;
+    var date = dateEl.value;
+    var cmId = cmSel.value;
+    if (statusEl) {
+      statusEl.classList.add('d-none');
+      statusEl.textContent = '';
+    }
+    destroySlotDayChart();
+    slotDayCache = { date: '', cmId: '', plantId: '', plantName: '', consumerName: '', slots: [], plants: [] };
+    if (hintEl) hintEl.textContent = 'Loading slot data…';
+    if (!date || !cmId) {
+      plantSel.innerHTML = '<option value="">—</option>';
+      if (hintEl) hintEl.textContent = '';
+      return;
+    }
+    var res = await fetchWithAuth(
+      '/api/generator/approved-allocation-slots/?consumer_manager_user_id=' +
+        encodeURIComponent(cmId) +
+        '&date=' +
+        encodeURIComponent(date)
+    );
+    var data = await res.json().catch(function () {
+      return {};
+    });
+    if (!res.ok) {
+      plantSel.innerHTML = '<option value="">—</option>';
+      if (statusEl) {
+        statusEl.textContent = data.detail || 'Could not load slot data.';
+        statusEl.classList.remove('d-none');
+      }
+      if (hintEl) hintEl.textContent = '';
+      return;
+    }
+    var plants = data.plants || [];
+    var slots = data.slots || [];
+    var prevPlant = plantSel.value;
+    plantSel.innerHTML =
+      '<option value="">Select plant</option>' +
+      '<option value="' +
+      SLOT_DAY_OVERALL +
+      '">Overall (all plants)</option>' +
+      plants
+        .map(function (p) {
+          return (
+            '<option value="' +
+            p.plant_id +
+            '">' +
+            escapeHtml(p.plant_name || 'Plant ' + p.plant_id) +
+            '</option>'
+          );
+        })
+        .join('');
+    slotDayCache = {
+      date: date,
+      cmId: cmId,
+      plantId: '',
+      plantName: '',
+      consumerName: data.consumer_name || '',
+      slots: slots,
+      plants: plants,
+    };
+    if (prevPlant && plantSel.querySelector('option[value="' + prevPlant + '"]')) {
+      plantSel.value = prevPlant;
+    } else if (plants.length) {
+      plantSel.value = SLOT_DAY_OVERALL;
+    }
+    updateSlotDayPlantName();
+    renderSlotDayChartFromCache();
+  }
+
+  function updateSlotDayPlantName() {
+    var plantSel = document.getElementById('slotDayPlantSelect');
+    if (!plantSel || !plantSel.value) {
+      slotDayCache.plantId = '';
+      slotDayCache.plantName = '';
+      return;
+    }
+    slotDayCache.plantId = plantSel.value;
+    if (plantSel.value === SLOT_DAY_OVERALL) {
+      slotDayCache.plantName = 'Overall (all plants)';
+      return;
+    }
+    var opt = plantSel.options[plantSel.selectedIndex];
+    slotDayCache.plantName = opt ? opt.textContent : '';
+  }
+
+  function exportSlotDayCsv() {
+    if (!slotDayCache.slots.length || !slotDayCache.plantId) {
+      window.alert('Load slot data and select a plant or Overall (all plants) before exporting.');
+      return;
+    }
+    var pid = slotDayCache.plantId;
+    var allocHeader =
+      pid === SLOT_DAY_OVERALL ? 'Total approved allocation (MWh)' : 'Approved allocation (MWh)';
+    var rows = [
+      ['Slot', 'Time block', allocHeader, 'Generator supply slot total (MWh)', 'IEX sellings (MWh)'],
+    ];
+    slotDayCache.slots.forEach(function (s) {
+      rows.push([
+        String(s.slot_index),
+        s.time_block || '',
+        fmtNum(scheduledMwhForSlot(s, pid), 4),
+        fmtNum(parseFloat(s.generator_supply_mwh) || 0, 4),
+        fmtNum(parseFloat(s.iex_mwh) || 0, 4),
+      ]);
+    });
+    var fname =
+      pid === SLOT_DAY_OVERALL
+        ? 'generator-report-slots_' + slotDayCache.date + '_overall-all-plants.csv'
+        : 'generator-report-slots_' + slotDayCache.date + '_plant-' + String(pid).replace(/[^\w-]+/g, '_') + '.csv';
+    downloadCsv(fname, rows);
+  }
+
+  function destroyGenRevisionChart() {
+    try {
+      if (charts.genRevision) charts.genRevision.destroy();
+    } catch (e) {}
+    charts.genRevision = null;
+  }
+
+  function renderGenRevisionFromCache() {
+    var hintEl = document.getElementById('genRevisionHint');
+    var statusEl = document.getElementById('genRevisionStatus');
+    var tbody = document.getElementById('genRevisionTableBody');
+    var grid = document.getElementById('genRevision-grid');
+    var canvas = document.getElementById('genRevisionChart');
+    var viewEl = document.getElementById('view-genRevision');
+    if (!canvas || !tbody || !grid) return;
+    if (!genRevisionCache.rows.length) {
+      destroyGenRevisionChart();
+      if (hintEl) hintEl.textContent = '';
+      if (tbody) tbody.innerHTML = emptyRowHtml(5, 'No slot rows for this date.');
+      if (grid) grid.innerHTML = '<div class="col-12"><p class="text-muted text-center py-4 mb-0">No data in range.</p></div>';
+      if (statusEl) {
+        statusEl.textContent = 'No approved allocation data for this day/manager.';
+        statusEl.classList.remove('d-none');
+      }
+      window.switchView('genRevision', viewEl ? viewEl.value : 'graph');
+      return;
+    }
+    if (statusEl) {
+      statusEl.classList.add('d-none');
+      statusEl.textContent = '';
+    }
+
+    var mode = genRevisionCache.mode || 'revision4';
+    var revisionLabel = generatorRevisionLabel(mode);
+    var labels = genRevisionCache.rows.map(function (r) {
+      return r.time_block || String(r.slot_index);
+    });
+    var approved = genRevisionCache.rows.map(function (r) {
+      return num(r.approved_mwh);
+    });
+    var selected = genRevisionCache.rows.map(function (r) {
+      return num(r.selected_mwh);
+    });
+    var diff = genRevisionCache.rows.map(function (r) {
+      return num(r.difference_mwh);
+    });
+    var approvedTotal = approved.reduce(function (a, b) { return a + b; }, 0);
+    var selectedTotal = selected.reduce(function (a, b) { return a + b; }, 0);
+    var diffTotal = diff.reduce(function (a, b) { return a + b; }, 0);
+
+    if (hintEl) {
+      hintEl.textContent =
+        'Date ' +
+        (genRevisionCache.date || '—') +
+        ' · ' +
+        (genRevisionCache.energyManagerName || 'Energy manager') +
+        ' · ' +
+        revisionLabel +
+        ' · 96 slots. Difference = approved allocation - selected revision supply.';
+    }
+
+    tbody.innerHTML = genRevisionCache.rows
+      .map(function (r) {
+        return (
+          '<tr><td>' +
+          escapeHtml(String(genRevisionCache.date || '')) +
+          ' · ' +
+          escapeHtml(r.time_block || '') +
+          '</td><td>' +
+          escapeHtml(revisionLabel) +
+          '</td><td class="tabular-nums">' +
+          fmtNum(r.approved_mwh, 4) +
+          '</td><td class="tabular-nums">' +
+          fmtNum(r.selected_mwh, 4) +
+          '</td><td class="tabular-nums">' +
+          fmtNum(r.difference_mwh, 4) +
+          '</td></tr>'
+        );
+      })
+      .join('');
+
+    grid.innerHTML =
+      '<div class="col-12 col-md-4"><div class="card card-round h-100 kai-reports-grid-card"><div class="card-body p-3 text-center">' +
+      '<p class="text-muted small mb-1">Total approved allocation</p><p class="h5 mb-0 tabular-nums">' +
+      fmtNum(approvedTotal, 2) +
+      ' <span class="fs-6 fw-normal text-muted">MWh</span></p></div></div></div>' +
+      '<div class="col-12 col-md-4"><div class="card card-round h-100 kai-reports-grid-card"><div class="card-body p-3 text-center">' +
+      '<p class="text-muted small mb-1">Total ' +
+      escapeHtml(revisionLabel) +
+      '</p><p class="h5 mb-0 text-primary tabular-nums">' +
+      fmtNum(selectedTotal, 2) +
+      ' <span class="fs-6 fw-normal text-muted">MWh</span></p></div></div></div>' +
+      '<div class="col-12 col-md-4"><div class="card card-round h-100 kai-reports-grid-card"><div class="card-body p-3 text-center">' +
+      '<p class="text-muted small mb-1">Total difference</p><p class="h5 mb-0 text-danger tabular-nums">' +
+      fmtNum(diffTotal, 2) +
+      ' <span class="fs-6 fw-normal text-muted">MWh</span></p></div></div></div>';
+
+    destroyGenRevisionChart();
+    charts.genRevision = new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            type: 'bar',
+            label: 'Approved allocation (MWh)',
+            data: approved,
+            backgroundColor: KAI_PRIMARY_FILL,
+            borderColor: KAI_PRIMARY,
+            borderWidth: 1,
+            order: 3,
+          },
+          {
+            type: 'line',
+            label: revisionLabel + ' supply (MWh)',
+            data: selected,
+            borderColor: KAI_GOLD,
+            backgroundColor: KAI_GOLD_FILL,
+            borderWidth: 2,
+            fill: false,
+            tension: 0.15,
+            pointRadius: 0,
+            pointHoverRadius: 3,
+            order: 2,
+          },
+          {
+            type: 'line',
+            label: 'Difference (MWh)',
+            data: diff,
+            borderColor: KAI_SECONDARY,
+            backgroundColor: KAI_SECONDARY_FILL,
+            borderWidth: 2,
+            fill: false,
+            tension: 0.15,
+            pointRadius: 0,
+            pointHoverRadius: 3,
+            order: 1,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { labels: { color: '#495057' } } },
+        datasets: { bar: histogramBarOptions },
+        scales: {
+          x: {
+            ticks: { color: '#6c757d', maxRotation: 90, minRotation: 45, autoSkip: true, maxTicksLimit: 32 },
+            grid: { display: false },
+          },
+          y: {
+            beginAtZero: true,
+            ticks: { color: '#6c757d' },
+            grid: { color: 'rgba(0,0,0,0.06)' },
+            title: { display: true, text: 'MWh', color: '#6c757d' },
+          },
+        },
+      },
+    });
+    window.switchView('genRevision', viewEl ? viewEl.value : 'graph');
+  }
+
+  async function loadGenRevisionEnergyManagers() {
+    var dateEl = document.getElementById('genRevisionDate');
+    var cmSel = document.getElementById('genRevisionCmSelect');
+    if (!dateEl || !cmSel) return;
+    var date = dateEl.value || tomorrowIsoDate();
+    dateEl.value = date;
+    var prev = cmSel.value;
+    cmSel.innerHTML = '<option value="">Loading…</option>';
+    cmSel.disabled = true;
+    var res = await fetchWithAuth(
+      '/api/generator/consumer-managers/?date=' + encodeURIComponent(date) + '&allocation_approved_only=1'
+    );
+    var data = await res.json().catch(function () {
+      return {};
+    });
+    cmSel.disabled = false;
+    if (!res.ok) {
+      cmSel.innerHTML = '<option value="">' + escapeHtml(data.detail || 'Error') + '</option>';
+      genRevisionCache.rows = [];
+      renderGenRevisionFromCache();
+      return;
+    }
+    var results = data.results || [];
+    cmSel.innerHTML =
+      '<option value="">Select energy manager</option>' +
+      results
+        .map(function (r) {
+          var id = r.consumer_manager_user_id;
+          var label = r.energy_manager_name || r.consumer_name || r.consumer_manager_email || String(id);
+          return '<option value="' + id + '">' + escapeHtml(label) + '</option>';
+        })
+        .join('');
+    if (prev && cmSel.querySelector('option[value="' + prev + '"]')) cmSel.value = prev;
+    else if (results.length) cmSel.value = String(results[0].consumer_manager_user_id);
+    await loadGenRevisionSlots();
+  }
+
+  async function loadGenRevisionSlots() {
+    var dateEl = document.getElementById('genRevisionDate');
+    var cmSel = document.getElementById('genRevisionCmSelect');
+    var modeEl = document.getElementById('genRevisionMode');
+    if (!dateEl || !cmSel || !modeEl) return;
+    var date = dateEl.value;
+    var cmId = cmSel.value;
+    var mode = modeEl.value || 'revision4';
+    genRevisionCache = { date: date, cmId: cmId, mode: mode, rows: [], energyManagerName: '' };
+    if (!date || !cmId) {
+      renderGenRevisionFromCache();
+      return;
+    }
+    var cmOpt = cmSel.options[cmSel.selectedIndex];
+    genRevisionCache.energyManagerName = cmOpt ? cmOpt.textContent : '';
+    var res = await fetchWithAuth(
+      '/api/generator/approved-allocation-slots/?consumer_manager_user_id=' +
+        encodeURIComponent(cmId) +
+        '&date=' +
+        encodeURIComponent(date)
+    );
+    var data = await res.json().catch(function () {
+      return {};
+    });
+    if (!res.ok) {
+      genRevisionCache.rows = [];
+      renderGenRevisionFromCache();
+      return;
+    }
+    var slots = data.slots || [];
+    genRevisionCache.rows = slots.map(function (s) {
+      var idx = parseInt(s.slot_index, 10) || 0;
+      var approved = num(s.total_mwh);
+      var selected = supplyAtRevision(s.generator_supply_mwh, idx, mode);
+      return {
+        slot_index: idx,
+        time_block: s.time_block || s.slot_time || '',
+        approved_mwh: approved,
+        selected_mwh: selected,
+        difference_mwh: approved - selected,
+      };
+    });
+    renderGenRevisionFromCache();
+  }
+
+  function exportGenRevisionCsv() {
+    if (!genRevisionCache.rows.length) {
+      window.alert('Load revision data first (select day and energy manager), then export.');
+      return;
+    }
+    var mode = genRevisionCache.mode || 'revision4';
+    var revisionLabel = generatorRevisionLabel(mode);
+    var rows = [
+      ['Date', 'Energy manager', 'Revision', 'Slot index', 'Time block', 'Approved allocation (MWh)', 'Selected revision supply (MWh)', 'Difference (MWh)'],
+    ];
+    genRevisionCache.rows.forEach(function (r) {
+      rows.push([
+        genRevisionCache.date || '',
+        genRevisionCache.energyManagerName || '',
+        revisionLabel,
+        String(r.slot_index),
+        r.time_block || '',
+        fmtNum(r.approved_mwh, 6),
+        fmtNum(r.selected_mwh, 6),
+        fmtNum(r.difference_mwh, 6),
+      ]);
+    });
+    var fname =
+      'generator-revision-report_' +
+      String(genRevisionCache.date || 'day').replace(/[^\w-]+/g, '_') +
+      '_cm-' +
+      String(genRevisionCache.cmId || 'na').replace(/[^\w-]+/g, '_') +
+      '_mode-' +
+      String(mode).replace(/[^\w-]+/g, '_') +
+      '.csv';
+    downloadCsv(fname, rows);
+  }
+
+  function initGenRevisionPanel() {
+    var dateEl = document.getElementById('genRevisionDate');
+    var cmSel = document.getElementById('genRevisionCmSelect');
+    var modeEl = document.getElementById('genRevisionMode');
+    var viewEl = document.getElementById('view-genRevision');
+    var slotDayDate = document.getElementById('slotDayDate');
+    if (dateEl) {
+      if (slotDayDate && slotDayDate.value) dateEl.value = slotDayDate.value;
+      else dateEl.value = tomorrowIsoDate();
+      dateEl.addEventListener('change', function () {
+        loadGenRevisionEnergyManagers();
+      });
+    }
+    if (cmSel) {
+      cmSel.addEventListener('change', function () {
+        loadGenRevisionSlots();
+      });
+    }
+    if (modeEl) {
+      modeEl.addEventListener('change', function () {
+        loadGenRevisionSlots();
+      });
+    }
+    if (viewEl) {
+      viewEl.addEventListener('change', function () {
+        window.switchView('genRevision', viewEl.value || 'graph');
+      });
+    }
+    loadGenRevisionEnergyManagers();
+  }
+
+  function initSlotDayPanel() {
+    var dEl = document.getElementById('slotDayDate');
+    var fromAlloc = document.getElementById('fromDate-allocation');
+    if (dEl) {
+      if (fromAlloc && fromAlloc.value) dEl.value = fromAlloc.value;
+      else dEl.value = tomorrowIsoDate();
+    }
+    var dateEl = document.getElementById('slotDayDate');
+    if (dateEl) {
+      dateEl.addEventListener('change', function () {
+        loadSlotDayEnergyManagers();
+      });
+    }
+    var cmSel = document.getElementById('slotDayCmSelect');
+    if (cmSel) {
+      cmSel.addEventListener('change', function () {
+        loadSlotDaySlots();
+      });
+    }
+    var plantSel = document.getElementById('slotDayPlantSelect');
+    if (plantSel) {
+      plantSel.addEventListener('change', function () {
+        updateSlotDayPlantName();
+        renderSlotDayChartFromCache();
+      });
+    }
+    var ex = document.getElementById('exportBtn-slotDay');
+    if (ex) ex.addEventListener('click', exportSlotDayCsv);
+    loadSlotDayEnergyManagers();
+  }
+
+  function copySectionPayload(data) {
+    return {
+      scope: data.scope,
+      kpis: Object.assign({}, data.kpis || {}),
+      demand_only: !!data.demand_only,
+      series: JSON.parse(JSON.stringify(data.series || [])),
+    };
+  }
+
+  function destroyChart(key) {
+    try {
+      if (charts[key]) charts[key].destroy();
+    } catch (e) {}
+    charts[key] = null;
+  }
+
+  function fmtNum(x, d) {
+    var n = parseFloat(x);
+    if (Number.isNaN(n)) return '—';
+    return n.toFixed(d != null ? d : 2);
+  }
+
+  function escapeHtml(s) {
+    if (s == null || s === '') return '';
+    var div = document.createElement('div');
+    div.textContent = s;
+    return div.innerHTML;
+  }
+
+  function csvEscapeCell(cell) {
+    var s = String(cell == null ? '' : cell);
+    if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  }
+
+  function downloadCsv(filename, rows) {
+    var bom = '\uFEFF';
+    var lines = rows.map(function (row) {
+      return row.map(csvEscapeCell).join(',');
+    });
+    var blob = new Blob([bom + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function exportSectionCsv(section) {
+    var fromEl = document.getElementById('fromDate-' + section);
+    var toEl = document.getElementById('toDate-' + section);
+    var from = fromEl && fromEl.value;
+    var to = toEl && toEl.value;
+    if (!from || !to) {
+      window.alert('Select From and To dates before exporting.');
+      return;
+    }
+    var d = sectionData[section];
+    if (!d || !d.series || !d.series.length) {
+      window.alert('No data to export for this range. Adjust dates and wait for the chart to refresh, or try again.');
+      return;
+    }
+    var rows;
+    var fname;
+    var scope = d.scope;
+    if (scope === 'admin') {
+      rows = [['Date', 'Demand (MWh)']];
+      d.series.forEach(function (s) {
+        var day = s.date != null ? String(s.date) : String(s.date_label || '');
+        rows.push([day, fmtNum(s.demand_mwh, 4)]);
+      });
+    } else if (scope === 'generator') {
+      rows = [
+        ['Date', 'Approved allocation (MWh)', 'Generator supply (MWh)', 'IEX sellings (MWh)', 'Difference (MWh)'],
+      ];
+      d.series.forEach(function (s) {
+        var day = s.date != null ? String(s.date) : String(s.date_label || '');
+        var ap = parseFloat(s.approved_allocation_mwh != null ? s.approved_allocation_mwh : s.allocated_mwh) || 0;
+        var gs = parseFloat(s.generator_supply_mwh) || 0;
+        var ix = parseFloat(s.iex_mwh) || 0;
+        rows.push([day, fmtNum(ap, 4), fmtNum(gs, 4), fmtNum(ix, 4), fmtNum(ap - gs, 4)]);
+      });
+    } else {
+      rows = [['Date', 'Allocated (MWh)', 'Unmet (MWh)']];
+      d.series.forEach(function (s) {
+        var day = s.date != null ? String(s.date) : String(s.date_label || '');
+        var dem = parseFloat(s.demand_mwh) || 0;
+        var alloc = parseFloat(s.allocated_mwh) || 0;
+        rows.push([day, fmtNum(alloc, 4), fmtNum(Math.max(dem - alloc, 0), 4)]);
+      });
+    }
+    fname = 'generator-report-allocation_' + from + '_to_' + to + '.csv';
+    downloadCsv(fname, rows);
+  }
+
+  function inclusiveDayCount(fromStr, toStr) {
+    if (!fromStr || !toStr) return 0;
+    var a = new Date(fromStr + 'T12:00:00');
+    var b = new Date(toStr + 'T12:00:00');
+    if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return 0;
+    return Math.round((b - a) / 86400000) + 1;
+  }
+
+  function updateRangeHint(section, fromStr, toStr, rowCount) {
+    var el = document.getElementById('rangeHint-' + section);
+    if (!el) return;
+    if (!fromStr || !toStr) {
+      el.textContent = '';
+      return;
+    }
+    var n = inclusiveDayCount(fromStr, toStr);
+    var msg =
+      'Each row is one calendar day. Inclusive range: ' +
+      n +
+      ' day' +
+      (n === 1 ? '' : 's') +
+      ' (' +
+      fromStr +
+      ' → ' +
+      toStr +
+      ').';
+    if (rowCount != null && rowCount !== n) {
+      msg += ' Showing ' + rowCount + ' row(s).';
+    }
+    el.textContent = msg;
+  }
+
+  function setDefaultDateInputs(series) {
+    if (!series.length) {
+      var today = new Date().toISOString().split('T')[0];
+      SECTIONS.forEach(function (sec) {
+        var f = document.getElementById('fromDate-' + sec);
+        var t = document.getElementById('toDate-' + sec);
+        if (f) f.value = today;
+        if (t) t.value = today;
+      });
+      return;
+    }
+    var first = series[0].date;
+    var last = series[series.length - 1].date;
+    SECTIONS.forEach(function (sec) {
+      var f = document.getElementById('fromDate-' + sec);
+      var to = document.getElementById('toDate-' + sec);
+      if (f) f.value = first;
+      if (to) to.value = last;
+    });
+  }
+
+  function cardHtml(dateLabel, sub, val, unit) {
+    return (
+      '<div class="col-6 col-md-4 col-lg-3">' +
+      '<div class="card card-round h-100 text-center kai-reports-grid-card">' +
+      '<div class="card-body py-3">' +
+      '<p class="text-muted small mb-1">' +
+      escapeHtml(sub) +
+      '</p>' +
+      '<p class="text-muted mb-2" style="font-size:0.75rem">' +
+      escapeHtml(dateLabel) +
+      '</p>' +
+      '<p class="h5 fw-bold text-primary mb-0 tabular-nums">' +
+      val +
+      ' <span class="text-muted fw-normal fs-6">' +
+      escapeHtml(unit) +
+      '</span></p>' +
+      '</div></div></div>'
+    );
+  }
+
+  function emptyRowHtml(colspan, msg) {
+    return (
+      '<tr><td colspan="' +
+      colspan +
+      '" class="py-4 text-center text-muted small">' +
+      escapeHtml(msg) +
+      '</td></tr>'
+    );
+  }
+
+  function renderAllocationPart(scope, series, kpis) {
+    var allocHead = document.getElementById('allocationTheadRow');
+    var allocBody = document.getElementById('allocationTableBody');
+    var allocGrid = document.getElementById('allocation-grid');
+
+    var labels = series.map(function (s) {
+      return s.date_label || s.date;
+    });
+    destroyChart('allocation');
+    var allocCtx = document.getElementById('allocationChart');
+
+    if (scope === 'admin') {
+      allocHead.innerHTML =
+        '<th>Date</th><th>Demand (MWh)</th><th>Scheduled supply (ref.)</th>';
+      allocBody.innerHTML = series.length
+        ? series
+            .map(function (s) {
+              return (
+                '<tr><td>' +
+                escapeHtml(String(s.date_label || s.date)) +
+                '</td><td class="tabular-nums">' +
+                fmtNum(s.demand_mwh, 4) +
+                '</td><td class="text-muted small">See platform summary</td></tr>'
+              );
+            })
+            .join('')
+        : emptyRowHtml(3, 'No rows in this date range.');
+      allocGrid.innerHTML = series.length
+        ? series
+            .map(function (s) {
+              return cardHtml(String(s.date_label || s.date), 'Demand', fmtNum(s.demand_mwh, 2), 'MWh');
+            })
+            .join('')
+        : '<div class="col-12"><p class="text-muted text-center py-4 mb-0">No data in range.</p></div>';
+      var demandData = series.map(function (s) {
+        return parseFloat(s.demand_mwh) || 0;
+      });
+      charts.allocation = new Chart(allocCtx, {
+        type: 'bar',
+        data: {
+          labels: labels.length ? labels : ['—'],
+          datasets: [
+            {
+              label: 'Platform demand (MWh)',
+              data: labels.length ? demandData : [0],
+              backgroundColor: KAI_PRIMARY_FILL,
+              borderColor: KAI_PRIMARY,
+              borderWidth: 1,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { labels: { color: '#495057' } } },
+          datasets: { bar: histogramBarOptions },
+          scales: {
+            x: { ticks: { color: '#6c757d' }, grid: { display: false }, offset: true },
+            y: { beginAtZero: true, ticks: { color: '#6c757d' }, grid: { color: 'rgba(0,0,0,0.06)' } },
+          },
+        },
+      });
+      return;
+    }
+
+    if (scope === 'generator') {
+      allocHead.innerHTML =
+        '<th>Date</th><th>Approved allocation (MWh)</th><th>Generator supply (MWh)</th><th>IEX sellings (MWh)</th><th>Difference (MWh)</th>';
+      allocBody.innerHTML = series.length
+        ? series
+            .map(function (s) {
+              var ap = parseFloat(s.approved_allocation_mwh != null ? s.approved_allocation_mwh : s.allocated_mwh) || 0;
+              var gs = parseFloat(s.generator_supply_mwh) || 0;
+              var ix = parseFloat(s.iex_mwh) || 0;
+              var diff = ap - gs;
+              return (
+                '<tr><td>' +
+                escapeHtml(String(s.date_label || s.date)) +
+                '</td><td class="tabular-nums">' +
+                fmtNum(ap, 4) +
+                '</td><td class="tabular-nums">' +
+                fmtNum(gs, 4) +
+                '</td><td class="tabular-nums">' +
+                fmtNum(ix, 4) +
+                '</td><td class="tabular-nums">' +
+                fmtNum(diff, 4) +
+                '</td></tr>'
+              );
+            })
+            .join('')
+        : emptyRowHtml(5, 'No rows in this date range.');
+      allocGrid.innerHTML = series.length
+        ? series
+            .map(function (s) {
+              var ap = parseFloat(s.approved_allocation_mwh != null ? s.approved_allocation_mwh : s.allocated_mwh) || 0;
+              return cardHtml(String(s.date_label || s.date), 'Approved allocation', fmtNum(ap, 2), 'MWh');
+            })
+            .join('')
+        : '<div class="col-12"><p class="text-muted text-center py-4 mb-0">No data in range.</p></div>';
+
+      var approvedBars = series.map(function (s) {
+        return parseFloat(s.approved_allocation_mwh != null ? s.approved_allocation_mwh : s.allocated_mwh) || 0;
+      });
+      var supplyBars = series.map(function (s) {
+        return parseFloat(s.generator_supply_mwh) || 0;
+      });
+      var iexLine = series.map(function (s) {
+        return parseFloat(s.iex_mwh) || 0;
+      });
+      charts.allocation = new Chart(allocCtx, {
+        type: 'bar',
+        data: {
+          labels: labels.length ? labels : ['—'],
+          datasets: [
+            {
+              type: 'bar',
+              label: 'Approved allocation (MWh)',
+              data: labels.length ? approvedBars : [0],
+              backgroundColor: KAI_PRIMARY_FILL,
+              borderColor: KAI_PRIMARY,
+              borderWidth: 1,
+              order: 3,
+            },
+            {
+              type: 'line',
+              label: 'Generator supply (MWh)',
+              data: labels.length ? supplyBars : [0],
+              borderColor: KAI_GOLD,
+              backgroundColor: 'rgba(232, 184, 76, 0.12)',
+              borderWidth: 2,
+              fill: false,
+              tension: 0.2,
+              pointRadius: 0,
+              pointHoverRadius: 4,
+              order: 2,
+            },
+            {
+              type: 'line',
+              label: 'IEX sellings (MWh)',
+              data: labels.length ? iexLine : [0],
+              borderColor: KAI_IEX,
+              backgroundColor: KAI_IEX_FILL,
+              borderWidth: 2,
+              fill: false,
+              tension: 0.2,
+              pointRadius: 0,
+              pointHoverRadius: 4,
+              order: 1,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: { legend: { labels: { color: '#495057' } } },
+          datasets: { bar: histogramBarOptions },
+          scales: {
+            x: { ticks: { color: '#6c757d' }, grid: { display: false }, offset: true },
+            y: {
+              beginAtZero: true,
+              ticks: { color: '#6c757d' },
+              grid: { color: 'rgba(0,0,0,0.06)' },
+            },
+          },
+        },
+      });
+      return;
+    }
+
+    allocHead.innerHTML = '<th>Date</th><th>Allocated (MWh)</th><th>Unmet (MWh)</th>';
+    allocBody.innerHTML = series.length
+      ? series
+          .map(function (s) {
+            var dem = parseFloat(s.demand_mwh) || 0;
+            var alloc = parseFloat(s.allocated_mwh) || 0;
+            var unmet = Math.max(dem - alloc, 0);
+            return (
+              '<tr><td>' +
+              escapeHtml(String(s.date_label || s.date)) +
+              '</td><td class="tabular-nums">' +
+              fmtNum(alloc, 4) +
+              '</td><td class="tabular-nums">' +
+              fmtNum(unmet, 4) +
+              '</td></tr>'
+            );
+          })
+          .join('')
+      : emptyRowHtml(3, 'No rows in this date range.');
+    allocGrid.innerHTML = series.length
+      ? series
+          .map(function (s) {
+            var alloc = parseFloat(s.allocated_mwh) || 0;
+            return cardHtml(String(s.date_label || s.date), 'Allocated', fmtNum(alloc, 2), 'MWh');
+          })
+          .join('')
+      : '<div class="col-12"><p class="text-muted text-center py-4 mb-0">No data in range.</p></div>';
+
+    var allocData = series.map(function (s) {
+      return parseFloat(s.allocated_mwh) || 0;
+    });
+    var unmetData = series.map(function (s) {
+      var dem = parseFloat(s.demand_mwh) || 0;
+      var a = parseFloat(s.allocated_mwh) || 0;
+      return Math.max(dem - a, 0);
+    });
+    charts.allocation = new Chart(allocCtx, {
+      type: 'bar',
+      data: {
+        labels: labels.length ? labels : ['—'],
+        datasets: [
+          {
+            label: 'Allocated (MWh)',
+            data: labels.length ? allocData : [0],
+            backgroundColor: KAI_PRIMARY_FILL,
+            borderColor: KAI_PRIMARY,
+            borderWidth: 1,
+          },
+          {
+            label: 'Unmet (MWh)',
+            data: labels.length ? unmetData : [0],
+            backgroundColor: KAI_SECONDARY_FILL,
+            borderColor: KAI_SECONDARY,
+            borderWidth: 1,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: '#495057' } } },
+        datasets: { bar: histogramBarOptions },
+        scales: {
+          x: { ticks: { color: '#6c757d' }, grid: { display: false }, offset: true },
+          y: { beginAtZero: true, ticks: { color: '#6c757d' }, grid: { color: 'rgba(0,0,0,0.06)' } },
+        },
+      },
+    });
+  }
+
+  function renderSectionSlice(section) {
+    var d = sectionData[section];
+    if (!d) return;
+    var scope = d.scope;
+    var kpis = d.kpis || {};
+    var series = d.series || [];
+    if (section === 'allocation') renderAllocationPart(scope, series, kpis);
+  }
+
+  window.applyFilters = async function (section) {
+    var fromEl = document.getElementById('fromDate-' + section);
+    var toEl = document.getElementById('toDate-' + section);
+    var viewEl = document.getElementById('view-' + section);
+    if (!fromEl || !toEl || !viewEl) return;
+
+    var fromDate = fromEl.value;
+    var toDate = toEl.value;
+    var view = viewEl.value;
+
+    if (!fromDate || !toDate) {
+      window.alert('Please select a date range (From and To).');
+      return;
+    }
+    if (fromDate > toDate) {
+      window.alert('From date must be on or before To date.');
+      return;
+    }
+
+    var url = '/api/reports/summary/?from=' + encodeURIComponent(fromDate) + '&to=' + encodeURIComponent(toDate);
+    var res = await fetchWithAuth(url);
+    var data = await res.json().catch(function () {
+      return {};
+    });
+    if (!res.ok) {
+      window.alert(data.detail || 'Could not load data for this range.');
+      return;
+    }
+    sectionData[section] = copySectionPayload(data);
+    var scopeEl = document.getElementById('reportsScope');
+    var kpis = data.kpis || {};
+    if (scopeEl && kpis.subtitle != null) scopeEl.textContent = kpis.subtitle || '';
+    renderSectionSlice(section);
+    window.switchView(section, view);
+    updateRangeHint(section, fromDate, toDate, (data.series || []).length);
+  };
+
+  function bindSectionFilters(section) {
+    var dateDebounce = null;
+    ['fromDate-' + section, 'toDate-' + section].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) {
+        el.addEventListener('change', function () {
+          clearTimeout(dateDebounce);
+          dateDebounce = setTimeout(function () {
+            window.applyFilters(section);
+          }, 400);
+        });
+      }
+    });
+
+    var viewEl = document.getElementById('view-' + section);
+    if (viewEl) {
+      viewEl.addEventListener('change', function () {
+        window.switchView(section, viewEl.value);
+      });
+    }
+
+    function enterApply(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        window.applyFilters(section);
+      }
+    }
+    ['fromDate-' + section, 'toDate-' + section, 'view-' + section].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.addEventListener('keydown', enterApply);
+    });
+  }
+
+  async function load() {
+    var errEl = document.getElementById('reportsError');
+    var content = document.getElementById('reportsContent');
+    var scopeEl = document.getElementById('reportsScope');
+    errEl.classList.add('d-none');
+    errEl.textContent = '';
+    content.classList.add('d-none');
+
+    var res = await fetchWithAuth('/api/reports/summary/');
+    var data = await res.json().catch(function () {
+      return {};
+    });
+    if (!res.ok) {
+      errEl.textContent = data.detail || 'Could not load reports.';
+      errEl.classList.remove('d-none');
+      if (scopeEl) scopeEl.textContent = '';
+      return;
+    }
+
+    var kpis = data.kpis || {};
+    var series = data.series || [];
+
+    SECTIONS.forEach(function (s) {
+      sectionData[s] = copySectionPayload(data);
+    });
+
+    if (scopeEl) scopeEl.textContent = kpis.subtitle || '';
+
+    setDefaultDateInputs(series);
+    SECTIONS.forEach(bindSectionFilters);
+
+    SECTIONS.forEach(function (s) {
+      var f = document.getElementById('fromDate-' + s);
+      var t = document.getElementById('toDate-' + s);
+      var rows = sectionData[s] && sectionData[s].series ? sectionData[s].series.length : 0;
+      updateRangeHint(s, f ? f.value : '', t ? t.value : '', rows);
+      renderSectionSlice(s);
+      var vEl = document.getElementById('view-' + s);
+      window.switchView(s, vEl ? vEl.value : 'graph');
+    });
+
+    content.classList.remove('d-none');
+    initSlotDayPanel();
+    initGenRevisionPanel();
+  }
+
+  var exportAllocationBtn = document.getElementById('exportBtn-allocation');
+  if (exportAllocationBtn) {
+    exportAllocationBtn.addEventListener('click', function () {
+      exportSectionCsv('allocation');
+    });
+  }
+  var exportGenRevisionBtn = document.getElementById('exportBtn-genRevision');
+  if (exportGenRevisionBtn) {
+    exportGenRevisionBtn.addEventListener('click', exportGenRevisionCsv);
+  }
+
+  load();
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,296 @@
+{% comment %}
+  Shared sidebar: same markup everywhere. Active state uses url_name; dashboard_router.html
+  also adjusts hrefs and .active via JS for JWT roles.
+{% endcomment %}
+{% with url_name=request.resolver_match.url_name|default:'' %}
+<div class="vm-sidebar-panel flex flex-col flex-1 min-h-0 w-full px-4 pt-6 pb-4">
+  <div id="vm-sidebar-brand" class="mb-6">
+    <h1 class="text-2xl font-bold text-primary mb-1 tracking-tight vm-sidebar-brand-text">ViewMetric</h1>
+    <p class="text-xs text-gray-500 vm-sidebar-brand-sub">Energy Intelligence</p>
+  </div>
+  <nav class="sidebar-nav flex-1 text-sm">
+    {# Consumer manager / plant / platform admin menu (hidden for GENERATOR via JS) #}
+    <div id="sidebarNavConsumer">
+    <ul class="space-y-1.5">
+      <li class="{% if url_name == 'dashboard' or url_name == 'consumer_manager_dashboard' or url_name == 'plant_user_dashboard' or url_name == 'platform_admin_dashboard' or url_name == 'generator_dashboard' %}bg-primary/10{% endif %} rounded-lg">
+        <a class="nav-item vm-nav-item block text-gray-800 font-medium" id="dashboardNav" href="{% url 'dashboard' %}">Dashboard</a>
+      </li>
+      <li class="{% if url_name == 'plant_management' %}bg-primary/10{% endif %} rounded-lg">
+        <a class="nav-item vm-nav-item block text-gray-800 font-medium" id="plantManagementNav" href="{% url 'plant_management' %}">Plant Management</a>
+      </li>
+      <li class="{% if url_name == 'consumer_demand_entry' or url_name == 'demand_entry' or url_name == 'demand_entry_schedule' %}bg-primary/10{% endif %} rounded-lg">
+        <a class="nav-item vm-nav-item block text-gray-800 font-medium" id="demandEntryNav" href="{% url 'consumer_demand_entry' %}">Demand Entry</a>
+      </li>
+      <li class="{% if url_name == 'consumer_allocation' or url_name == 'dashboard' %}bg-primary/10{% endif %} rounded-lg">
+        {# Default /dashboard/ — plant allocations live there; JS sets CM href to /consumer-allocation/ #}
+        <a class="nav-item vm-nav-item block text-gray-800 font-medium" id="allocationNav" href="{% url 'dashboard' %}">Allocations</a>
+      </li>
+      <li class="{% if url_name == 'consumer_plantwise_allocation' %}bg-primary/10{% endif %} rounded-lg">
+        <a class="nav-item vm-nav-item block text-gray-800 font-medium" id="plantwiseAllocationNav" href="{% url 'consumer_plantwise_allocation' %}">Plantwise Allocation</a>
+      </li>
+      <li class="{% if url_name == 'iex_predictor' %}bg-primary/10{% endif %} rounded-lg">
+        <a class="nav-item vm-nav-item block text-gray-800 font-medium" id="iexPredictorNav" href="{% url 'iex_predictor' %}">IEX Predictor</a>
+      </li>
+      <li class="{% if url_name == 'reports' %}bg-primary/10{% endif %} rounded-lg">
+        <a class="nav-item vm-nav-item block text-gray-800 font-medium" id="reportsNav" href="{% url 'reports' %}">Reports</a>
+      </li>
+      <li class="{% if url_name == 'settings' %}bg-primary/10{% endif %} rounded-lg">
+        <a class="nav-item vm-nav-item block text-gray-800 font-medium" id="settingsNav" href="{% url 'settings' %}">Settings</a>
+      </li>
+    </ul>
+    </div>
+    {# Generator-only menu #}
+    <div id="sidebarNavGenerator" class="hidden">
+      <ul class="space-y-1.5">
+        <li id="genNavLiDashboard" class="{% if url_name == 'generator_dashboard' %}bg-primary/10{% endif %} rounded-lg">
+          <a class="nav-item vm-nav-item block text-gray-800 font-medium" id="genDashboardNav" href="{% url 'generator_dashboard' %}">Dashboard</a>
+        </li>
+        <li id="genNavLiSchedule" class="{% if url_name == 'generator_allocation' or url_name == 'generator_allocation_edit' %}bg-primary/10{% endif %} rounded-lg">
+          <a class="nav-item vm-nav-item block text-gray-800 font-medium" id="genScheduleNav" href="{% url 'generator_allocation' %}">Supply schedule</a>
+        </li>
+        <li id="genNavLiDemand" class="{% if url_name == 'generator_demand' %}bg-primary/10{% endif %} rounded-lg">
+          <a class="nav-item vm-nav-item block text-gray-800 font-medium" id="genDemandNav" href="{% url 'generator_demand' %}">Allocation view</a>
+        </li>
+        <li id="genNavLiReports" class="{% if url_name == 'generator_reports' %}bg-primary/10{% endif %} rounded-lg">
+          <a class="nav-item vm-nav-item block text-gray-800 font-medium" id="genReportsNav" href="{% url 'generator_reports' %}">Reports</a>
+        </li>
+        <li id="genNavLiSettings" class="{% if url_name == 'generator_settings' %}bg-primary/10{% endif %} rounded-lg">
+          <a class="nav-item vm-nav-item block text-gray-800 font-medium" id="genSettingsNav" href="{% url 'generator_settings' %}">Settings</a>
+        </li>
+      </ul>
+    </div>
+  </nav>
+  <div class="mt-auto pt-8">
+    <a href="{% url 'logout' %}" class="block text-center bg-gray-100 text-gray-800 py-2.5 rounded-xl hover:bg-gray-200 transition text-sm font-medium border border-gray-200">Logout</a>
+  </div>
+</div>
+<script>
+(function () {
+  function decodeJwtRole(token) {
+    try {
+      var payload = token.split('.')[1];
+      var base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+      var json = decodeURIComponent(atob(base64).split('').map(function (c) {
+        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+      }).join(''));
+      var o = JSON.parse(json);
+      return o.role || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function normalizeRoleSidebar(r) {
+    if (r == null || r === '') return null;
+    var s = String(r).trim();
+    var u = s.toUpperCase().replace(/\s+/g, '_');
+    if (u === 'PLANT_USER' || u === 'PLANTUSER') return 'PLANT_USER';
+    if (u === 'CONSUMER_MANAGER' || u === 'CONSUMERMANAGER') return 'CONSUMER_MANAGER';
+    if (u === 'PLATFORM_ADMIN' || u === 'PLATFORMADMIN') return 'PLATFORM_ADMIN';
+    if (u === 'GENERATOR') return 'GENERATOR';
+    return s;
+  }
+
+  function mergeRoleFromMeApiSidebar(jwtRole) {
+    var out = jwtRole;
+    function getMe(accessToken) {
+      try {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/api/me/', false);
+        xhr.setRequestHeader('Authorization', 'Bearer ' + accessToken);
+        xhr.send(null);
+        return { status: xhr.status, text: xhr.responseText || '' };
+      } catch (e) {
+        return { status: 0, text: '' };
+      }
+    }
+    var tok = localStorage.getItem('accessToken') || '';
+    var r = getMe(tok);
+    if (r.status === 401) {
+      var rt = localStorage.getItem('refreshToken');
+      if (rt) {
+        try {
+          var rx = new XMLHttpRequest();
+          rx.open('POST', '/api/token/refresh/', false);
+          rx.setRequestHeader('Content-Type', 'application/json');
+          rx.send(JSON.stringify({ refresh: rt }));
+          if (rx.status === 200) {
+            var d = JSON.parse(rx.responseText || '{}');
+            if (d.access) {
+              localStorage.setItem('accessToken', d.access);
+              tok = d.access;
+              r = getMe(tok);
+            }
+          }
+        } catch (e) {}
+      }
+    }
+    if (r.status === 200) {
+      try {
+        var me = JSON.parse(r.text);
+        if (me && me.role) {
+          var ar = normalizeRoleSidebar(me.role);
+          if (ar) out = ar;
+        }
+      } catch (e) {}
+    }
+    return out;
+  }
+
+  /** JWT + /api/me/ (sync refresh); dashboard_router may set __vmResolvedRole first. */
+  function ensureResolvedRole() {
+    if (typeof window.__vmResolvedRole !== 'undefined' && window.__vmResolvedRole) {
+      return window.__vmResolvedRole;
+    }
+    var token = localStorage.getItem('accessToken');
+    if (!token) return null;
+    var raw = decodeJwtRole(token);
+    var role = (typeof window.normalizeRole === 'function') ? window.normalizeRole(raw) : normalizeRoleSidebar(raw);
+    role = mergeRoleFromMeApiSidebar(role);
+    window.__vmResolvedRole = role;
+    return role;
+  }
+
+  function applyGeneratorSidebar() {
+    var consumer = document.getElementById('sidebarNavConsumer');
+    var generator = document.getElementById('sidebarNavGenerator');
+    if (!consumer || !generator) return;
+    var role = ensureResolvedRole();
+    if (role === 'GENERATOR') {
+      consumer.classList.add('hidden');
+      generator.classList.remove('hidden');
+      var path = window.location.pathname || '';
+      document.querySelectorAll('#sidebarNavGenerator .nav-item').forEach(function (n) { n.classList.remove('active'); });
+      var genLinks = [
+        { prefix: '/generator-dashboard/', el: document.getElementById('genDashboardNav') },
+        { prefix: '/generator-allocation/', el: document.getElementById('genScheduleNav') },
+        { prefix: '/generator-demand/', el: document.getElementById('genDemandNav') },
+        { prefix: '/generator-reports/', el: document.getElementById('genReportsNav') },
+        { prefix: '/generator-settings/', el: document.getElementById('genSettingsNav') }
+      ];
+      for (var i = 0; i < genLinks.length; i++) {
+        var g = genLinks[i];
+        if (g.el && path.startsWith(g.prefix)) {
+          g.el.classList.add('active');
+          break;
+        }
+      }
+    } else {
+      consumer.classList.remove('hidden');
+      generator.classList.add('hidden');
+    }
+  }
+
+  /**
+   * Hrefs + CM-only items for consumer menu — runs on every page that includes this sidebar
+   * (dashboard_router cannot run on consumer-allocation, reports, etc.).
+   */
+  function applyConsumerSidebarNav() {
+    var role = ensureResolvedRole();
+    if (!role || role === 'GENERATOR') return;
+
+    var path = window.location.pathname || '';
+    if (role === 'PLANT_USER' && path === '/consumer-allocation/') {
+      window.location.replace('/dashboard/');
+      return;
+    }
+    if (role === 'PLANT_USER' && path === '/consumer-demand-entry/') {
+      window.location.replace('/demand-entry/');
+      return;
+    }
+    var dashboardNav = document.getElementById('dashboardNav');
+    var plantManagementNav = document.getElementById('plantManagementNav');
+    var iexPredictorNav = document.getElementById('iexPredictorNav');
+    var demandEntryNav = document.getElementById('demandEntryNav');
+    var allocationNav = document.getElementById('allocationNav');
+    var plantwiseAllocationNav = document.getElementById('plantwiseAllocationNav');
+    var reportsNav = document.getElementById('reportsNav');
+    var settingsNav = document.getElementById('settingsNav');
+
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(function (n) { n.classList.remove('active'); });
+
+    if (role === 'CONSUMER_MANAGER') {
+      if (dashboardNav) dashboardNav.href = '/consumer-manager-dashboard/';
+      if (plantManagementNav) {
+        plantManagementNav.href = '/plant-management/';
+        plantManagementNav.classList.remove('hidden');
+      }
+      if (iexPredictorNav) iexPredictorNav.classList.remove('hidden');
+      if (plantwiseAllocationNav) plantwiseAllocationNav.classList.remove('hidden');
+      if (path === '/plant-management/') plantManagementNav && plantManagementNav.classList.add('active');
+      else if (path === '/iex-predictor/') iexPredictorNav && iexPredictorNav.classList.add('active');
+      else if (path === '/consumer-allocation/') allocationNav && allocationNav.classList.add('active');
+      else if (path === '/consumer-plantwise-allocation/') plantwiseAllocationNav && plantwiseAllocationNav.classList.add('active');
+      else if (path === '/reports/') reportsNav && reportsNav.classList.add('active');
+      else if (path === '/settings/') settingsNav && settingsNav.classList.add('active');
+      else dashboardNav && dashboardNav.classList.add('active');
+    } else if (role === 'PLANT_USER') {
+      if (plantManagementNav) plantManagementNav.classList.add('hidden');
+      if (iexPredictorNav) iexPredictorNav.classList.add('hidden');
+      if (plantwiseAllocationNav) plantwiseAllocationNav.classList.add('hidden');
+      if (dashboardNav) dashboardNav.href = '/plant-user-dashboard/';
+      if (demandEntryNav) demandEntryNav.href = '/demand-entry/';
+      if (allocationNav) allocationNav.href = '/plant-allocations/';
+      if (settingsNav) settingsNav.href = '/plant-user-settings/';
+      if (path === '/plant-user-dashboard/') dashboardNav && dashboardNav.classList.add('active');
+      else if (path.indexOf('/demand-entry/') === 0) demandEntryNav && demandEntryNav.classList.add('active');
+      else if (path === '/dashboard/' || path === '/plant-allocations/') allocationNav && allocationNav.classList.add('active');
+      else if (path === '/reports/') reportsNav && reportsNav.classList.add('active');
+      else if (path === '/plant-user-settings/') settingsNav && settingsNav.classList.add('active');
+      else dashboardNav && dashboardNav.classList.add('active');
+    } else {
+      if (plantManagementNav) plantManagementNav.classList.add('hidden');
+      if (plantwiseAllocationNav) plantwiseAllocationNav.classList.add('hidden');
+      if (dashboardNav) dashboardNav.href = '/dashboard/';
+      if (iexPredictorNav) iexPredictorNav.classList.remove('hidden');
+      if (path === '/reports/') reportsNav && reportsNav.classList.add('active');
+      else if (path === '/settings/') settingsNav && settingsNav.classList.add('active');
+      else if (dashboardNav) dashboardNav.classList.add('active');
+    }
+
+    if (demandEntryNav && role !== 'PLANT_USER') {
+      if (role === 'CONSUMER_MANAGER') demandEntryNav.href = '/consumer-demand-entry/';
+      else demandEntryNav.href = '/demand-entry/';
+    }
+
+    if (allocationNav && role !== 'PLANT_USER') {
+      if (role === 'CONSUMER_MANAGER') allocationNav.href = '/consumer-allocation/';
+      else allocationNav.href = '/dashboard/';
+    }
+  }
+
+  window.vmApplyConsumerSidebarNav = applyConsumerSidebarNav;
+
+  function hydrateSidebarLogo() {
+    var token = localStorage.getItem('accessToken');
+    var brand = document.getElementById('vm-sidebar-brand');
+    if (!token || !brand) return;
+    fetch('/api/me/', { headers: { 'Authorization': 'Bearer ' + token } })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data && data.logo_url) {
+          brand.innerHTML = '';
+          var img = document.createElement('img');
+          img.src = data.logo_url;
+          img.alt = '';
+          img.className = 'vm-sidebar-logo';
+          brand.appendChild(img);
+        }
+      })
+      .catch(function () {});
+  }
+  window.vmRefreshSidebarLogo = function () {
+    hydrateSidebarLogo();
+    applyGeneratorSidebar();
+    applyConsumerSidebarNav();
+  };
+  function boot() {
+    applyGeneratorSidebar();
+    applyConsumerSidebarNav();
+    hydrateSidebarLogo();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+})();
+</script>
+{% endwith %}

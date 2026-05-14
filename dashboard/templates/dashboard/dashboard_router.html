@@ -1,0 +1,1238 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dashboard - Energy Intelligence Platform</title>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  {% include 'dashboard/includes/vm_theme_overrides.html' %}
+  {% include 'dashboard/includes/viewmetric_head.html' %}
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    .vm-nav-item.router-active { background: rgba(47, 125, 107, 0.1); color: #2F7D6B; font-weight: 600; }
+    .vm-nav-item.active { background: rgba(47, 125, 107, 0.1); color: #2F7D6B; font-weight: 600; }
+  </style>
+</head>
+<body class="min-h-screen antialiased overflow-x-hidden">
+  <div class="flex bg-[#F7F9FB] min-h-screen w-full min-w-0 max-w-full">
+    <aside class="vm-sidebar-column flex flex-col shrink-0 w-64 min-h-screen bg-white border-r border-gray-200" id="sidebar">
+      {% include 'dashboard/includes/sidebar.html' %}
+      <div id="platformPlantManagementNav" class="platform-only hidden px-4 pb-6 border-t border-gray-100 pt-4 shrink-0 bg-white">
+        <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Plant Management</div>
+        <button class="w-full mb-2 bg-gray-100 text-gray-800 py-2 rounded-lg text-sm hover:bg-gray-200 transition" id="btnAddConsumerManager" type="button">Add Consumer Manager</button>
+        <button class="w-full bg-gray-100 text-gray-800 py-2 rounded-lg text-sm hover:bg-gray-200 transition" id="btnAddPlantManager" type="button">Add Plant Manager</button>
+      </div>
+    </aside>
+
+    <main class="main flex-1 p-6 w-full min-w-0 max-w-full overflow-x-hidden overflow-y-auto">
+      <section id="platformAdminSection" class="section hidden space-y-6 w-full">
+        <h2 class="h2 text-xl font-bold text-gray-900">Platform Admin Dashboard</h2>
+
+        <div class="bg-white rounded-2xl shadow-sm p-6 border border-gray-100 hidden" id="platformAddConsumerManagerCard">
+          <h3 class="h3">Create Consumer Manager</h3>
+          <form id="createConsumerManagerForm" class="form-grid">
+            <div>
+              <label class="label">Consumer Name</label>
+              <input id="consumerName" type="text" required />
+            </div>
+            <div>
+              <label class="label">Manager Name</label>
+              <input id="managerName" type="text" required />
+            </div>
+            <div>
+              <label class="label">Manager Email</label>
+              <input id="managerEmail" type="email" required />
+            </div>
+            <div>
+              <label class="label">Manager Password</label>
+              <input id="managerPassword" type="password" required />
+            </div>
+            <div class="full">
+              <button class="btn" type="submit">Create</button>
+              <div id="platformAdminMsg" class="muted msg" aria-live="polite"></div>
+            </div>
+          </form>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-sm p-6 border border-gray-100 hidden" id="platformAddPlantManagerCard">
+          <h3 class="h3">Add Plant Manager (Plant User)</h3>
+          <form id="createPlatformPlantUserForm" class="form-grid">
+            <div class="full">
+              <label class="label">Assign to Consumer</label>
+              <select id="platformConsumerSelect" required>
+                <option value="">Select consumer...</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="label">Plant Name</label>
+              <input id="platformPlantName" type="text" required />
+            </div>
+            <div>
+              <label class="label">Location</label>
+              <input id="platformPlantLocation" type="text" required />
+            </div>
+            <div class="full">
+              <label class="label">Slot tariff difference (96 × 15-min)</label>
+              <button class="btn btn-secondary" id="btnPlatformOpenTariffModal" type="button">Enter slot tariffs</button>
+              <span id="platformTariffSummary" class="muted" style="margin-left:8px;"></span>
+            </div>
+            <div>
+              <label class="label">Transmission Loss Year</label>
+              <input id="platformTlYear" type="number" required />
+            </div>
+            <div>
+              <label class="label">State Transmission Loss (%)</label>
+              <input id="platformTlStateValue" type="number" step="0.01" required />
+            </div>
+            <div>
+              <label class="label">Central Transmission Loss (%)</label>
+              <input id="platformTlCentralValue" type="number" step="0.01" required />
+            </div>
+            <div>
+                <label class="label">Plant User EmpID</label>
+                <input id="platformPlantUserEmpid" type="text" required />
+            </div>
+            <div>
+              <label class="label">Plant User Email</label>
+              <input id="platformPlantUserEmail" type="email" required />
+            </div>
+            <div>
+              <label class="label">Plant User Password</label>
+              <input id="platformPlantUserPassword" type="password" required />
+            </div>
+
+            <div class="full">
+              <button class="btn" type="submit">Create</button>
+              <div id="platformPlantAdminMsg" class="muted msg" aria-live="polite"></div>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <section id="consumerManagerDashboardSection" class="section hidden space-y-6 w-full">
+        <h2 class="text-2xl font-bold text-gray-900 tracking-tight">Consumer Manager Dashboard</h2>
+        <div class="w-full flex flex-col gap-6 max-w-full">
+          <div class="bg-white p-6 rounded-2xl shadow-sm w-full max-w-full border border-gray-100">
+            <h2 class="text-lg font-semibold text-gray-800 mb-2">Plant Demand (Slot-wise)</h2>
+            <div class="flex flex-row flex-wrap items-center gap-3 w-full mb-4">
+              <select id="consumerDemandDateFilter" aria-label="Select day" class="flex-1 min-w-[12rem] max-w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white text-gray-900 focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none"></select>
+              <select id="consumerDemandChartType" class="flex-1 min-w-[11rem] sm:flex-none sm:w-56 border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white text-gray-800 focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none">
+                <option value="histogram" selected>Histogram (Default)</option>
+                <option value="line">Statistical (line)</option>
+                <option value="bar">Bar</option>
+                <option value="pie">Pie</option>
+                <option value="doughnut">Doughnut</option>
+              </select>
+            </div>
+            <div class="relative w-full max-w-full overflow-hidden" style="height:min(420px, 50vh); min-height:280px;">
+              <canvas id="consumerDemandWeekChart" class="max-w-full"></canvas>
+            </div>
+          </div>
+          <div class="bg-white p-6 rounded-2xl shadow-sm w-full max-w-full border border-gray-100">
+            <h2 class="text-lg font-semibold text-gray-800 mb-2">Plant Supply (Slot-wise)</h2>
+            <div class="flex flex-row flex-wrap items-center gap-3 w-full mb-4">
+              <select id="consumerSupplyDateFilter" aria-label="Select day" class="flex-1 min-w-[12rem] max-w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white text-gray-900 focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none"></select>
+              <select id="consumerSupplyChartType" class="flex-1 min-w-[11rem] sm:flex-none sm:w-56 border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white text-gray-800 focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none">
+                <option value="histogram" selected>Histogram (Default)</option>
+                <option value="line">Statistical (line)</option>
+                <option value="bar">Bar</option>
+                <option value="pie">Pie</option>
+                <option value="doughnut">Doughnut</option>
+              </select>
+            </div>
+            <div class="relative w-full max-w-full overflow-hidden" style="height:min(420px, 50vh); min-height:280px;">
+              <canvas id="consumerSupplyWeekChart" class="max-w-full"></canvas>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="plantUserSection" class="section hidden space-y-6 w-full">
+        <h2 class="text-2xl font-bold text-primary tracking-tight">Plant User Dashboard</h2>
+
+        <div id="plantDashboardGraphs" class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <div class="bg-white rounded-2xl shadow-sm p-6 border border-gray-100">
+            <h3 class="text-lg font-semibold text-gray-900">Demand (96 slots)</h3>
+            <div class="flex flex-wrap gap-4 mt-4 items-end">
+              <div class="min-w-[220px]">
+                <label class="block text-sm font-medium text-gray-600" for="plantDemandDaySelect">Select Day</label>
+                <select id="plantDemandDaySelect" class="mt-2 border border-gray-200 rounded-lg px-3 py-2 w-full text-sm focus:ring-2 focus:ring-primary focus:border-primary outline-none bg-white"></select>
+              </div>
+              <div class="min-w-[260px]">
+                <span class="block text-sm font-medium text-gray-600">Plant</span>
+                <p id="plantUserPlantLabelDemand" class="mt-2 text-sm text-gray-800 font-medium min-h-[40px] flex items-center">—</p>
+              </div>
+              <div class="min-w-[180px]">
+                <label class="block text-sm font-medium text-gray-600" for="plantDemandChartType">Chart type</label>
+                <select id="plantDemandChartType" class="mt-2 border border-gray-200 rounded-lg px-3 py-2 w-full text-sm focus:ring-2 focus:ring-primary focus:border-primary outline-none bg-white">
+                  <option value="line" selected>Line</option>
+                  <option value="bar">Bar</option>
+                  <option value="pie">Pie</option>
+                  <option value="doughnut">Doughnut</option>
+                  <option value="histogram">Histogram</option>
+                </select>
+              </div>
+            </div>
+            <div class="mt-4 rounded-xl overflow-hidden bg-white" style="max-height:320px; position:relative;">
+              <canvas id="demandChart"></canvas>
+            </div>
+            <div class="text-sm text-gray-500 mt-2" id="plantDemandChartStatus" aria-live="polite"></div>
+          </div>
+
+          <div class="bg-white rounded-2xl shadow-sm p-6 border border-gray-100">
+            <h3 class="text-lg font-semibold text-gray-900">Demand vs approved supply (net) (96 slots)</h3>
+            <div class="flex flex-wrap gap-4 mt-4 items-end">
+              <div class="min-w-[220px]">
+                <label class="block text-sm font-medium text-gray-600" for="plantSupplyDaySelect">Select Day</label>
+                <select id="plantSupplyDaySelect" class="mt-2 border border-gray-200 rounded-lg px-3 py-2 w-full text-sm focus:ring-2 focus:ring-primary focus:border-primary outline-none bg-white"></select>
+              </div>
+              <div class="min-w-[260px]">
+                <span class="block text-sm font-medium text-gray-600">Plant</span>
+                <p id="plantUserPlantLabelSupply" class="mt-2 text-sm text-gray-800 font-medium min-h-[40px] flex items-center">—</p>
+              </div>
+              <div class="min-w-[180px]">
+                <label class="block text-sm font-medium text-gray-600" for="plantSupplyChartType">Chart type</label>
+                <select id="plantSupplyChartType" class="mt-2 border border-gray-200 rounded-lg px-3 py-2 w-full text-sm focus:ring-2 focus:ring-primary focus:border-primary outline-none bg-white">
+                  <option value="line" selected>Line</option>
+                  <option value="bar">Bar</option>
+                  <option value="pie">Pie</option>
+                  <option value="doughnut">Doughnut</option>
+                  <option value="histogram">Histogram</option>
+                </select>
+              </div>
+            </div>
+            <div class="mt-4 rounded-xl overflow-hidden bg-white" style="max-height:320px; position:relative;">
+              <canvas id="supplyChart"></canvas>
+            </div>
+            <div class="text-sm text-gray-500 mt-2" id="plantSupplyChartStatus" aria-live="polite"></div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-sm p-6 border border-gray-100" id="plantAllocationsTableCard">
+          <h3 class="text-lg font-semibold text-gray-900">Slot-wise demand vs approved supply (96 slots)</h3>
+          <div class="mt-4 max-w-xs">
+            <label class="block text-sm font-medium text-gray-600" for="plantAllocationsDaySelect">Select Day</label>
+            <select id="plantAllocationsDaySelect" class="mt-2 border border-gray-200 rounded-lg px-3 py-2 w-full text-sm focus:ring-2 focus:ring-primary focus:border-primary outline-none bg-white"></select>
+          </div>
+          <div class="muted mb-8" id="plantSlotApprovalHint"></div>
+          <div class="table-wrap" style="max-height:520px; overflow:auto;">
+            <table class="table" id="plantSlotsTable">
+              <thead>
+                <tr>
+                  <th style="width:56px;">Sl. No.</th>
+                  <th style="min-width:140px;">Time slot</th>
+                  <th>Demand (net)</th>
+                  <th>Approved supply (net)</th>
+                  <th>Difference (Demand − Supply)</th>
+                </tr>
+              </thead>
+              <tbody id="plantSlotsTbody">
+                <tr><td colspan="5" class="muted">Select a day to load slot-wise details.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-sm p-6 border border-gray-100">
+          <h3 class="h3">Next Step</h3>
+          <a class="btn" href="/demand-entry/">Enter Demand Schedule</a>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="hourlyTariffModal" class="modal-overlay hidden" role="dialog" aria-labelledby="modalTitle" aria-modal="true">
+    <div class="modal-content" style="max-width:560px;">
+      <h3 id="modalTitle" class="h3">Slot tariff difference (Rs/unit)</h3>
+      <p class="muted mb-8">Enter grid − RE tariff difference for each 15-minute slot (96 per day). Two decimal places (e.g. 2.30, 3.15).</p>
+      <div class="table-wrap" style="max-height:min(70vh,420px);overflow-y:auto;">
+        <table class="table" id="hourlyTariffTable">
+          <thead>
+            <tr><th>S.No</th><th>Time slot</th><th>Tariff difference</th></tr>
+          </thead>
+          <tbody id="hourlyTariffTbody"></tbody>
+        </table>
+      </div>
+      <div class="row-controls mt-16" style="justify-content:flex-end;gap:8px;">
+        <button class="btn btn-secondary" id="btnCloseTariffModal" type="button">Cancel</button>
+        <button class="btn" id="btnApplyTariffModal" type="button">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center; z-index:1000; }
+    .modal-overlay.hidden { display:none; }
+    .modal-content { background:#fff; padding:24px; border-radius:1rem; box-shadow:0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.06); border:1px solid #f3f4f6; }
+    .modal-content .table-wrap { border:1px solid #e5e7eb; border-radius:4px; }
+  </style>
+
+  <script src="{% static 'js/vm_dashboard_realtime.js' %}"></script>
+  <script>
+    const accessToken = localStorage.getItem('accessToken');
+    if (!accessToken) window.location.href = '/login/';
+
+    function decodeJwt(token) {
+      const payload = token.split('.')[1];
+      const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+      const json = decodeURIComponent(atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+      return JSON.parse(json);
+    }
+
+    /** Align with CustomUser.Role values; JWT or /api/me/ may vary slightly. */
+    function normalizeRole(r) {
+      if (r == null || r === '') return null;
+      const s = String(r).trim();
+      const u = s.toUpperCase().replace(/\s+/g, '_');
+      if (u === 'PLANT_USER' || u === 'PLANTUSER') return 'PLANT_USER';
+      if (u === 'CONSUMER_MANAGER' || u === 'CONSUMERMANAGER') return 'CONSUMER_MANAGER';
+      if (u === 'PLATFORM_ADMIN' || u === 'PLATFORMADMIN') return 'PLATFORM_ADMIN';
+      if (u === 'GENERATOR') return 'GENERATOR';
+      return s;
+    }
+    window.normalizeRole = normalizeRole;
+
+    /** Authoritative role from DB (fixes missing/wrong JWT role claim). Sync refresh on 401 matches fetchWithAuth. */
+    function mergeRoleFromMeApi(jwtRole) {
+      let out = jwtRole;
+      function getMe(accessToken) {
+        try {
+          const xhr = new XMLHttpRequest();
+          xhr.open('GET', '/api/me/', false);
+          xhr.setRequestHeader('Authorization', 'Bearer ' + accessToken);
+          xhr.send(null);
+          return { status: xhr.status, text: xhr.responseText || '' };
+        } catch (e) {
+          return { status: 0, text: '' };
+        }
+      }
+      let tok = localStorage.getItem('accessToken') || '';
+      let r = getMe(tok);
+      if (r.status === 401) {
+        const rt = localStorage.getItem('refreshToken');
+        if (rt) {
+          try {
+            const rx = new XMLHttpRequest();
+            rx.open('POST', '/api/token/refresh/', false);
+            rx.setRequestHeader('Content-Type', 'application/json');
+            rx.send(JSON.stringify({ refresh: rt }));
+            if (rx.status === 200) {
+              const d = JSON.parse(rx.responseText || '{}');
+              if (d.access) {
+                localStorage.setItem('accessToken', d.access);
+                tok = d.access;
+                r = getMe(tok);
+              }
+            }
+          } catch (e) {}
+        }
+      }
+      if (r.status === 200) {
+        try {
+          const me = JSON.parse(r.text);
+          if (me && me.role) {
+            const ar = normalizeRole(me.role);
+            if (ar) out = ar;
+          }
+        } catch (e) {}
+      }
+      return out;
+    }
+
+    function apiHeaders() {
+      const tok = localStorage.getItem('accessToken') || '';
+      return {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + tok
+      };
+    }
+
+    async function fetchWithAuth(url, opts = {}) {
+      let res = await fetch(url, { ...opts, headers: { ...apiHeaders(), ...(opts.headers || {}) } });
+      if (res.status === 401) {
+        const refreshToken = localStorage.getItem('refreshToken');
+        if (refreshToken) {
+          try {
+            const r = await fetch('/api/token/refresh/', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ refresh: refreshToken })
+            });
+            if (r.ok) {
+              const d = await r.json().catch(() => ({}));
+              if (d.access) {
+                localStorage.setItem('accessToken', d.access);
+                res = await fetch(url, { ...opts, headers: { ...apiHeaders(), ...(opts.headers || {}) } });
+              }
+            }
+          } catch (e) {}
+        }
+        if (res.status === 401) {
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
+          window.location.href = '/login/?expired=1';
+          throw new Error('Session expired');
+        }
+      }
+      return res;
+    }
+
+    function escapeHtml(s) {
+      if (s == null || s === '') return '';
+      const d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    const path = window.location.pathname;
+
+    function setVisible(role) {
+      const platformEl = document.getElementById('platformAdminSection');
+      const consumerDashboardEl = document.getElementById('consumerManagerDashboardSection');
+      const plantEl = document.getElementById('plantUserSection');
+
+      if (platformEl) platformEl.classList.add('hidden');
+      if (consumerDashboardEl) consumerDashboardEl.classList.add('hidden');
+      if (plantEl) plantEl.classList.add('hidden');
+
+      if (role === 'PLATFORM_ADMIN' && platformEl) platformEl.classList.remove('hidden');
+      else if (role === 'PLANT_USER' && plantEl) plantEl.classList.remove('hidden');
+      else if (role === 'CONSUMER_MANAGER' && consumerDashboardEl) consumerDashboardEl.classList.remove('hidden');
+    }
+
+    let role = null;
+    try {
+      const payload = decodeJwt(accessToken);
+      role = normalizeRole(payload.role);
+    } catch (e) {
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      window.location.href = '/login/';
+      throw e;
+    }
+
+    role = mergeRoleFromMeApi(role);
+    window.__vmResolvedRole = role;
+
+    if (role === 'PLANT_USER' && path === '/dashboard/') {
+      window.location.replace('/plant-allocations/');
+      throw new Error('redirect');
+    }
+
+    if (!role) {
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      window.location.href = '/login/';
+      throw new Error('No role');
+    }
+
+    setVisible(role);
+
+    if (typeof window.vmRefreshSidebarLogo === 'function') {
+      window.vmRefreshSidebarLogo();
+    }
+
+    if (role === 'GENERATOR') {
+      const onGeneratorShell =
+        path.startsWith('/generator-dashboard/') ||
+        path.startsWith('/generator-dashboard-1/') ||
+        path.startsWith('/generator-allocation/') ||
+        path.startsWith('/generator-demand/') ||
+        path.startsWith('/generator-reports/') ||
+        path.startsWith('/generator-settings/') ||
+        path === '/settings/';
+      if (!onGeneratorShell) {
+        window.location.replace('/generator-dashboard/');
+        throw new Error('redirect');
+      }
+    }
+
+    // Consumer sidebar hrefs + active state: includes/sidebar.html (vmRefreshSidebarLogo → applyConsumerSidebarNav)
+
+    // Platform Admin: show plant-management nav + default to consumer-manager card
+    const platformPlantManagementNav = document.getElementById('platformPlantManagementNav');
+    if (platformPlantManagementNav) {
+      if (role === 'PLATFORM_ADMIN') platformPlantManagementNav.classList.remove('hidden');
+      else platformPlantManagementNav.classList.add('hidden');
+    }
+
+    const platformAddConsumerManagerCard = document.getElementById('platformAddConsumerManagerCard');
+    const platformAddPlantManagerCard = document.getElementById('platformAddPlantManagerCard');
+    function showPlatformCard(which) {
+      if (platformAddConsumerManagerCard) platformAddConsumerManagerCard.classList.add('hidden');
+      if (platformAddPlantManagerCard) platformAddPlantManagerCard.classList.add('hidden');
+      if (which === 'consumer' && platformAddConsumerManagerCard) platformAddConsumerManagerCard.classList.remove('hidden');
+      if (which === 'plant' && platformAddPlantManagerCard) platformAddPlantManagerCard.classList.remove('hidden');
+    }
+    if (role === 'PLATFORM_ADMIN') {
+      showPlatformCard('consumer');
+    }
+
+    const btnAddConsumerManager = document.getElementById('btnAddConsumerManager');
+    const btnAddPlantManager = document.getElementById('btnAddPlantManager');
+    if (btnAddConsumerManager && btnAddPlantManager) {
+      btnAddConsumerManager.addEventListener('click', () => showPlatformCard('consumer'));
+      btnAddPlantManager.addEventListener('click', () => showPlatformCard('plant'));
+    }
+
+    // Seed default year in UI
+    const yearInput = document.getElementById('tlYear');
+    if (yearInput) yearInput.value = new Date().getFullYear();
+    const pYearInput = document.getElementById('platformTlYear');
+    if (pYearInput) pYearInput.value = new Date().getFullYear();
+    const platformTlStateInput = document.getElementById('platformTlStateValue');
+    if (platformTlStateInput && platformTlStateInput.value === '') platformTlStateInput.value = 2.0;
+    const platformTlCentralInput = document.getElementById('platformTlCentralValue');
+    if (platformTlCentralInput && platformTlCentralInput.value === '') platformTlCentralInput.value = 2.5;
+
+    const SLOT_TARIFF_COUNT = 96;
+    function slotTimeLabel(slotIdx0) {
+      const start = slotIdx0 * 15;
+      const end = (slotIdx0 + 1) * 15;
+      const fmt = (m) => {
+        if (m >= 1440) return '24:00';
+        const h = Math.floor(m / 60);
+        const min = m % 60;
+        return String(h).padStart(2, '0') + ':' + String(min).padStart(2, '0');
+      };
+      return fmt(start) + '–' + fmt(end);
+    }
+
+    // Slot-wise tariff difference (96 values): shared state for platform admin create-plant form.
+    let createFormHourlyTariff = new Array(SLOT_TARIFF_COUNT).fill(0);
+
+    function normalizeTariffArrayForUi(a) {
+      if (Array.isArray(a) && a.length === SLOT_TARIFF_COUNT) return a.map(v => parseFloat(v) || 0);
+      if (Array.isArray(a) && a.length === 24) {
+        const out = [];
+        for (let i = 0; i < 24; i++) {
+          const v = parseFloat(a[i]) || 0;
+          for (let j = 0; j < 4; j++) out.push(v);
+        }
+        return out;
+      }
+      return new Array(SLOT_TARIFF_COUNT).fill(0);
+    }
+
+    /** Two digits after the decimal (e.g. 2.30, 3.15). */
+    function formatTariffSlotDisplay(v) {
+      const n = parseFloat(v);
+      if (Number.isNaN(n)) return '0.00';
+      return n.toFixed(2);
+    }
+
+    function buildHourlyTariffRows(values) {
+      const arr = normalizeTariffArrayForUi(values);
+      return Array.from({ length: SLOT_TARIFF_COUNT }, (_, i) =>
+        `<tr><td>${i + 1}</td><td>${slotTimeLabel(i)}</td><td><input class="tariffDiffInput" type="number" step="0.01" min="0" data-slot="${i}" value="${formatTariffSlotDisplay(arr[i])}" style="width:96px;" /></td></tr>`
+      ).join('');
+    }
+
+    function wireTariffInputsTwoDecimals(el) {
+      if (!el) return;
+      el.querySelectorAll('.tariffDiffInput').forEach(inp => {
+        inp.addEventListener('blur', () => {
+          const n = parseFloat(inp.value);
+          if (!Number.isNaN(n)) inp.value = n.toFixed(2);
+        });
+      });
+    }
+
+    function openHourlyTariffModal(values, context) {
+      const modal = document.getElementById('hourlyTariffModal');
+      const tbody = document.getElementById('hourlyTariffTbody');
+      if (!modal || !tbody) return;
+      tbody.innerHTML = buildHourlyTariffRows(values);
+      wireTariffInputsTwoDecimals(tbody);
+      const base = normalizeTariffArrayForUi(values);
+      if (context === 'create-consumer') createFormHourlyTariff = base;
+      if (context === 'create-platform') createFormHourlyTariff = base;
+      modal.classList.remove('hidden');
+    }
+
+    function closeHourlyTariffModal() {
+      const modal = document.getElementById('hourlyTariffModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function collectHourlyTariffFromModal() {
+      const inputs = document.querySelectorAll('#hourlyTariffModal .tariffDiffInput');
+      const arr = Array(SLOT_TARIFF_COUNT).fill(0);
+      inputs.forEach(inp => {
+        const i = parseInt(inp.getAttribute('data-slot'), 10);
+        if (i >= 0 && i < SLOT_TARIFF_COUNT) arr[i] = parseFloat(inp.value) || 0;
+      });
+      return arr;
+    }
+
+    document.getElementById('btnPlatformOpenTariffModal')?.addEventListener('click', () => openHourlyTariffModal(createFormHourlyTariff, 'create-platform'));
+    document.getElementById('btnCloseTariffModal')?.addEventListener('click', closeHourlyTariffModal);
+    document.getElementById('btnApplyTariffModal')?.addEventListener('click', async () => {
+      const arr = collectHourlyTariffFromModal();
+      createFormHourlyTariff = arr;
+      const avg = arr.reduce((a,b)=>a+b,0) / SLOT_TARIFF_COUNT;
+      const ts = document.getElementById('tariffSummary');
+      if (ts) ts.textContent = 'Avg: ' + avg.toFixed(2) + ' Rs/u (' + arr.filter(v=>v!==0).length + ' slots set)';
+      const pts = document.getElementById('platformTariffSummary');
+      if (pts) pts.textContent = 'Avg: ' + avg.toFixed(2) + ' Rs/u (' + arr.filter(v=>v!==0).length + ' slots set)';
+      closeHourlyTariffModal();
+    });
+    document.getElementById('hourlyTariffModal')?.addEventListener('click', (e) => { if (e.target.id === 'hourlyTariffModal') closeHourlyTariffModal(); });
+
+    // Platform admin create consumer manager
+    const cmForm = document.getElementById('createConsumerManagerForm');
+    if (cmForm) {
+      cmForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const payload = {
+          consumer_name: document.getElementById('consumerName').value,
+          manager_name: document.getElementById('managerName').value,
+          manager_email: document.getElementById('managerEmail').value,
+          manager_password: document.getElementById('managerPassword').value
+        };
+        const res = await fetch('/api/create-consumer-manager/', { method: 'POST', headers: apiHeaders(), body: JSON.stringify(payload) });
+        const data = await res.json().catch(() => ({}));
+        document.getElementById('platformAdminMsg').textContent = res.ok ? 'Created successfully.' : (data.detail || 'Create failed');
+        if (res.ok) await loadConsumersForPlatform();
+      });
+    }
+
+    // Platform admin create plant user under a consumer
+    const platformPlantForm = document.getElementById('createPlatformPlantUserForm');
+    const platformConsumerSelect = document.getElementById('platformConsumerSelect');
+
+    async function loadConsumersForPlatform() {
+      if (!platformConsumerSelect) return;
+      const res = await fetch('/api/consumers/', { headers: apiHeaders() });
+      const data = await res.json().catch(() => ({results: []}));
+      if (!res.ok) return;
+      const results = data.results || [];
+      platformConsumerSelect.innerHTML = '<option value="">Select consumer...</option>' + results.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    }
+
+    if (role === 'PLATFORM_ADMIN') {
+      loadConsumersForPlatform();
+    }
+
+    if (platformPlantForm) {
+      platformPlantForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const consumerId = document.getElementById('platformConsumerSelect').value;
+        const payload = {
+          consumer_id: parseInt(consumerId, 10),
+          plant_name: document.getElementById('platformPlantName').value,
+          location: document.getElementById('platformPlantLocation').value,
+          hourly_tariff_difference: createFormHourlyTariff.map(v => parseFloat(v) || 0),
+          transmission_loss_year: parseInt(document.getElementById('platformTlYear').value, 10),
+          state_transition_loss_value: parseFloat(document.getElementById('platformTlStateValue').value),
+          central_transmission_loss_value: parseFloat(document.getElementById('platformTlCentralValue').value),
+          plant_user_empid: document.getElementById('platformPlantUserEmpid').value,
+          plant_user_email: document.getElementById('platformPlantUserEmail').value,
+          plant_user_password: document.getElementById('platformPlantUserPassword').value
+        };
+
+        const res = await fetch('/api/create-plant-user-for-consumer/', { method: 'POST', headers: apiHeaders(), body: JSON.stringify(payload) });
+        const data = await res.json().catch(() => ({}));
+        document.getElementById('platformPlantAdminMsg').textContent = res.ok ? 'Plant user created.' : (data.detail || 'Create failed');
+      });
+    }
+
+    if (role === 'CONSUMER_MANAGER') {
+      (function initConsumerManagerSlotCharts() {
+          const SLOT_LABELS = Array.from({ length: 96 }, (_, i) => {
+            const hour = Math.floor(i / 4);
+            const min = (i % 4) * 15;
+            return `${hour}:${String(min).padStart(2, '0')}`;
+          });
+          const HOUR_LABELS = Array.from({ length: 24 }, (_, h) => `${h}:00`);
+
+          function createHistogram(arr) {
+            const out = new Array(24).fill(0);
+            for (let i = 0; i < arr.length; i++) {
+              out[Math.floor(i / 4)] += Number(arr[i]) || 0;
+            }
+            return out;
+          }
+
+          function pieColors(n, hue) {
+            return Array.from({ length: n }, (_, i) => {
+              const a = 0.35 + 0.65 * (i / Math.max(n - 1, 1));
+              return `hsla(${hue}, 42%, 42%, ${Math.min(1, a)})`;
+            });
+          }
+
+          const demandState = { chart: null };
+          const supplyState = { chart: null };
+          let slotLabels = SLOT_LABELS;
+          let currentDemandValues = [];
+          let currentSupplyValues = [];
+
+          function toDateStr(d) {
+            const yyyy = d.getFullYear();
+            const mm = String(d.getMonth() + 1).padStart(2, '0');
+            const dd = String(d.getDate()).padStart(2, '0');
+            return `${yyyy}-${mm}-${dd}`;
+          }
+
+          /** Yesterday, Today, then Tomorrow … +6 days (same window as allocations / demand APIs). */
+          function buildAllowedDates() {
+            const base = new Date();
+            base.setHours(0, 0, 0, 0);
+            const yesterday = new Date(base.getTime() - 24 * 60 * 60 * 1000);
+            const tomorrow = new Date(base.getTime() + 24 * 60 * 60 * 1000);
+            const out = [];
+            out.push({ dateStr: toDateStr(yesterday), label: 'Yesterday' });
+            out.push({ dateStr: toDateStr(base), label: 'Today' });
+            for (let i = 0; i < 7; i++) {
+              const d = new Date(tomorrow.getTime() + i * 24 * 60 * 60 * 1000);
+              out.push({
+                dateStr: toDateStr(d),
+                label: i === 0 ? 'Tomorrow' : d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }),
+              });
+            }
+            return out;
+          }
+
+          const allowedDates = buildAllowedDates();
+          const defaultDateStr = allowedDates[2] ? allowedDates[2].dateStr : toDateStr(new Date(Date.now() + 86400000));
+
+          function renderSlotChart(state, canvasEl, chartType, values, labelPrefix, hue) {
+            if (!canvasEl) return;
+            if (state.chart) state.chart.destroy();
+            let type = chartType;
+            let labels = slotLabels;
+            let data = (values || []).slice();
+            if (data.length < 96) {
+              while (data.length < 96) data.push(0);
+            } else if (data.length > 96) {
+              data = data.slice(0, 96);
+            }
+
+            if (type === 'histogram') {
+              data = createHistogram(data);
+              labels = HOUR_LABELS;
+              type = 'bar';
+            }
+
+            const border = hue === 'demand' ? '#2F7D6B' : '#059669';
+            const fillRgb = hue === 'demand' ? 'rgba(47,125,107,0.2)' : 'rgba(5,150,105,0.2)';
+
+            const dataset = {
+              label: labelPrefix + ' (MWh)',
+              data,
+              borderColor: border,
+            };
+
+            if (type === 'line') {
+              dataset.tension = 0.4;
+              dataset.backgroundColor = fillRgb;
+              dataset.fill = true;
+            } else if (type === 'bar') {
+              const fill = hue === 'demand' ? 'rgba(47,125,107,0.7)' : 'rgba(5,150,105,0.7)';
+              dataset.backgroundColor = data.map(() => fill);
+              dataset.borderWidth = 1;
+            } else if (type === 'pie' || type === 'doughnut') {
+              dataset.backgroundColor = pieColors(data.length, hue === 'demand' ? 155 : 145);
+              dataset.borderColor = '#fff';
+              dataset.borderWidth = 1;
+            }
+
+            state.chart = new Chart(canvasEl, {
+              type,
+              data: { labels, datasets: [dataset] },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { intersect: false, mode: 'index' },
+                plugins: {
+                  legend: { display: type === 'line' || type === 'bar' },
+                },
+                scales: type === 'line' || type === 'bar'
+                  ? {
+                      x: { ticks: { maxRotation: 45, autoSkip: true, maxTicksLimit: type === 'bar' && labels.length === 24 ? 24 : 32 } },
+                      y: { beginAtZero: true },
+                    }
+                  : undefined,
+              },
+            });
+          }
+
+          async function loadDemandData(dateStr) {
+            const res = await fetchWithAuth('/api/demand-data/?date=' + encodeURIComponent(dateStr));
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.detail || 'Failed to load demand data');
+            if (Array.isArray(data.labels) && data.labels.length === 96) slotLabels = data.labels;
+            currentDemandValues = Array.isArray(data.values) ? data.values.map(Number) : [];
+            currentSupplyValues = Array.isArray(data.supply_values) ? data.supply_values.map(Number) : [];
+          }
+
+          async function loadAndRenderBoth() {
+            const dEl = document.getElementById('consumerDemandDateFilter');
+            const sEl = document.getElementById('consumerSupplyDateFilter');
+            const dateStr = (dEl && dEl.value) ? dEl.value : defaultDateStr;
+            await loadDemandData(dateStr);
+            if (sEl) sEl.value = dateStr;
+            const dType = document.getElementById('consumerDemandChartType')?.value || 'histogram';
+            const sType = document.getElementById('consumerSupplyChartType')?.value || 'histogram';
+            renderSlotChart(demandState, document.getElementById('consumerDemandWeekChart'), dType, currentDemandValues, 'Demand', 'demand');
+            renderSlotChart(supplyState, document.getElementById('consumerSupplyWeekChart'), sType, currentSupplyValues, 'Supply', 'supply');
+          }
+
+          async function loadForDemandDate() {
+            const dEl = document.getElementById('consumerDemandDateFilter');
+            const dateStr = (dEl && dEl.value) ? dEl.value : defaultDateStr;
+            const sEl = document.getElementById('consumerSupplyDateFilter');
+            if (sEl) sEl.value = dateStr;
+            await loadDemandData(dateStr);
+            const dType = document.getElementById('consumerDemandChartType')?.value || 'histogram';
+            const sType = document.getElementById('consumerSupplyChartType')?.value || 'histogram';
+            renderSlotChart(demandState, document.getElementById('consumerDemandWeekChart'), dType, currentDemandValues, 'Demand', 'demand');
+            renderSlotChart(supplyState, document.getElementById('consumerSupplyWeekChart'), sType, currentSupplyValues, 'Supply', 'supply');
+          }
+
+          async function loadForSupplyDate() {
+            const sEl = document.getElementById('consumerSupplyDateFilter');
+            const dateStr = (sEl && sEl.value) ? sEl.value : defaultDateStr;
+            const dEl = document.getElementById('consumerDemandDateFilter');
+            if (dEl) dEl.value = dateStr;
+            await loadDemandData(dateStr);
+            const dType = document.getElementById('consumerDemandChartType')?.value || 'histogram';
+            const sType = document.getElementById('consumerSupplyChartType')?.value || 'histogram';
+            renderSlotChart(demandState, document.getElementById('consumerDemandWeekChart'), dType, currentDemandValues, 'Demand', 'demand');
+            renderSlotChart(supplyState, document.getElementById('consumerSupplyWeekChart'), sType, currentSupplyValues, 'Supply', 'supply');
+          }
+
+          const df = document.getElementById('consumerDemandDateFilter');
+          const sf = document.getElementById('consumerSupplyDateFilter');
+          const optsHtml = allowedDates.map(function (d) {
+            return '<option value="' + d.dateStr + '">' + d.label + '</option>';
+          }).join('');
+          if (df) {
+            df.innerHTML = optsHtml;
+            df.value = defaultDateStr;
+          }
+          if (sf) {
+            sf.innerHTML = optsHtml;
+            sf.value = defaultDateStr;
+          }
+
+          document.getElementById('consumerDemandDateFilter')?.addEventListener('change', () => { loadForDemandDate().catch(() => {}); });
+          document.getElementById('consumerSupplyDateFilter')?.addEventListener('change', () => { loadForSupplyDate().catch(() => {}); });
+          document.getElementById('consumerDemandChartType')?.addEventListener('change', (e) => {
+            renderSlotChart(demandState, document.getElementById('consumerDemandWeekChart'), e.target.value, currentDemandValues, 'Demand', 'demand');
+          });
+          document.getElementById('consumerSupplyChartType')?.addEventListener('change', (e) => {
+            renderSlotChart(supplyState, document.getElementById('consumerSupplyWeekChart'), e.target.value, currentSupplyValues, 'Supply', 'supply');
+          });
+
+          loadAndRenderBoth().catch(() => {});
+        })();
+    }
+
+    // Plant user dashboard: generator-style layout (96-slot cards + chart types); /dashboard/ = slot table only
+    if (role === 'PLANT_USER') {
+      const plantPath = window.location.pathname;
+      const demandDayEl = document.getElementById('plantDemandDaySelect');
+      const supplyDayEl = document.getElementById('plantSupplyDaySelect');
+      const demandTypeEl = document.getElementById('plantDemandChartType');
+      const supplyTypeEl = document.getElementById('plantSupplyChartType');
+      const allocDaySelect = document.getElementById('plantAllocationsDaySelect');
+      const demandCanvas = document.getElementById('demandChart');
+      const supplyCanvas = document.getElementById('supplyChart');
+      let plantDemandChart = null;
+      let plantSupplyChart = null;
+      const demandState = { labels: [], values: [] };
+      /** Per slot from /api/dashboard/slots/: demand_net_mwh vs approved_supply_net_mwh */
+      const supplyState = { labels: [], demandNet: [], supplyNet: [] };
+
+      const VM_P_RGB = '47, 125, 107';
+      const VM_TEAL = 'rgba(47,125,107,0.7)';
+      const VM_GOLD = 'rgba(232,184,76,0.7)';
+
+      (function togglePlantUserPanels() {
+        const graphsEl = document.getElementById('plantDashboardGraphs');
+        const tableEl = document.getElementById('plantAllocationsTableCard');
+        const p = window.location.pathname;
+        const showGraphs = p === '/plant-user-dashboard/';
+        const showTable = p === '/dashboard/';
+        if (graphsEl) graphsEl.style.display = showGraphs ? '' : 'none';
+        if (tableEl) tableEl.style.display = showTable ? '' : 'none';
+      })();
+
+      function toDateStr(d) {
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+      }
+
+      function buildAllowedDates() {
+        const base = new Date();
+        base.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(base.getTime() + 24 * 60 * 60 * 1000);
+        const out = [];
+        for (let i = 0; i < 7; i++) {
+          const d = new Date(tomorrow.getTime() + i * 24 * 60 * 60 * 1000);
+          out.push({
+            dateStr: toDateStr(d),
+            label: i === 0 ? 'Tomorrow' : d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+          });
+        }
+        return out;
+      }
+
+      function createHistogramBins(values, binCount) {
+        const nums = values.map(v => Number(v)).filter(v => Number.isFinite(v));
+        if (nums.length === 0) return { labels: [], counts: [] };
+        const min = Math.min(...nums);
+        const max = Math.max(...nums);
+        if (min === max) {
+          return { labels: [String(min.toFixed(3))], counts: [nums.length] };
+        }
+        const binSize = (max - min) / binCount;
+        const histogram = new Array(binCount).fill(0);
+        const labels = [];
+        for (let i = 0; i < binCount; i++) {
+          const lo = min + i * binSize;
+          const hi = min + (i + 1) * binSize;
+          labels.push(lo.toFixed(2) + '–' + hi.toFixed(2));
+        }
+        nums.forEach(value => {
+          const idx = Math.min(Math.floor((value - min) / binSize), binCount - 1);
+          histogram[idx]++;
+        });
+        return { labels, counts: histogram };
+      }
+
+      /** Shared MWh bins for demand vs supply histograms */
+      function createHistogramBinsDual(seriesA, seriesB, binCount) {
+        const a = seriesA.map(v => Number(v)).filter(v => Number.isFinite(v));
+        const b = seriesB.map(v => Number(v)).filter(v => Number.isFinite(v));
+        const all = a.concat(b);
+        if (all.length === 0) return { labels: [], countA: [], countB: [] };
+        const min = Math.min(...all);
+        const max = Math.max(...all);
+        if (min === max) {
+          return { labels: [String(min.toFixed(3))], countA: [a.length], countB: [b.length] };
+        }
+        const binSize = (max - min) / binCount;
+        const histA = new Array(binCount).fill(0);
+        const histB = new Array(binCount).fill(0);
+        const labels = [];
+        for (let i = 0; i < binCount; i++) {
+          const lo = min + i * binSize;
+          const hi = min + (i + 1) * binSize;
+          labels.push(lo.toFixed(2) + '–' + hi.toFixed(2));
+        }
+        a.forEach(v => { const idx = Math.min(Math.floor((v - min) / binSize), binCount - 1); histA[idx]++; });
+        b.forEach(v => { const idx = Math.min(Math.floor((v - min) / binSize), binCount - 1); histB[idx]++; });
+        return { labels, countA: histA, countB: histB };
+      }
+
+      function setPlantLabels(name) {
+        const n = name || '—';
+        const a = document.getElementById('plantUserPlantLabelDemand');
+        const b = document.getElementById('plantUserPlantLabelSupply');
+        if (a) a.textContent = n;
+        if (b) b.textContent = n;
+      }
+
+      const chartOptsMW = {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { intersect: false, mode: 'index' },
+        plugins: {
+          legend: { display: true, labels: { color: '#374151' } },
+          tooltip: { callbacks: { label: (c) => (c.dataset.label || '') + ': ' + (Number(c.raw || 0).toFixed(2)) + ' MW' } },
+        },
+        scales: {
+          x: { ticks: { maxRotation: 45, autoSkip: true, maxTicksLimit: 24, color: '#6B7280' }, grid: { display: false } },
+          y: { beginAtZero: true, title: { display: true, text: 'MW', color: '#6B7280' }, ticks: { color: '#6B7280' }, grid: { color: '#E5E7EB' } },
+        },
+      };
+
+      const chartOptsMWh = {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { intersect: false, mode: 'index' },
+        plugins: {
+          legend: { display: true, labels: { color: '#374151' } },
+          tooltip: { callbacks: { label: (c) => (c.dataset.label || '') + ': ' + (Number(c.raw || 0).toFixed(2)) + ' MWh' } },
+        },
+        scales: {
+          x: { ticks: { maxRotation: 45, autoSkip: true, maxTicksLimit: 24, color: '#6B7280' }, grid: { display: false } },
+          y: { beginAtZero: true, title: { display: true, text: 'MWh', color: '#6B7280' }, ticks: { color: '#6B7280' }, grid: { color: '#E5E7EB' } },
+        },
+      };
+
+      function renderDemandChart() {
+        const t = demandTypeEl ? demandTypeEl.value : 'line';
+        const labels = demandState.labels;
+        const values = demandState.values.map(v => Number(v) || 0);
+        if (plantDemandChart) { plantDemandChart.destroy(); plantDemandChart = null; }
+        if (!demandCanvas) return;
+        const borderColor = 'rgb(' + VM_P_RGB + ')';
+        const fillAlpha = 'rgba(' + VM_P_RGB + ', 0.15)';
+        const barFill = 'rgba(' + VM_P_RGB + ', 0.35)';
+
+        if (t === 'histogram') {
+          const { labels: hLabels, counts } = createHistogramBins(values, 10);
+          plantDemandChart = new Chart(demandCanvas, {
+            type: 'bar',
+            data: {
+              labels: hLabels,
+              datasets: [{ label: 'Frequency (slots)', data: counts, backgroundColor: barFill, borderColor, borderWidth: 1 }],
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: { labels: { color: '#374151' } },
+                tooltip: { callbacks: { label: (c) => (c.dataset.label || '') + ': ' + String(c.raw) + ' slots' } },
+              },
+              scales: {
+                x: { ticks: { maxRotation: 45, color: '#6B7280' }, grid: { display: false } },
+                y: { beginAtZero: true, title: { display: true, text: 'Count', color: '#6B7280' }, ticks: { color: '#6B7280', stepSize: 1 }, grid: { color: '#E5E7EB' } },
+              },
+            },
+          });
+          return;
+        }
+        if (t === 'line') {
+          plantDemandChart = new Chart(demandCanvas, {
+            type: 'line',
+            data: {
+              labels,
+              datasets: [{ label: 'Demand (MW)', data: values, borderColor, backgroundColor: fillAlpha, fill: true, tension: 0.4, pointRadius: 0, borderWidth: 2 }],
+            },
+            options: chartOptsMW,
+          });
+          return;
+        }
+        if (t === 'bar') {
+          plantDemandChart = new Chart(demandCanvas, {
+            type: 'bar',
+            data: {
+              labels,
+              datasets: [{ label: 'Demand (MW)', data: values, backgroundColor: barFill, borderColor, borderWidth: 1 }],
+            },
+            options: chartOptsMW,
+          });
+          return;
+        }
+        if (t === 'pie' || t === 'doughnut') {
+          const bgColors = labels.map((_, i) => (i % 2 === 0 ? VM_TEAL : VM_GOLD));
+          plantDemandChart = new Chart(demandCanvas, {
+            type: t,
+            data: { labels, datasets: [{ data: values, backgroundColor: bgColors, borderColor: '#fff', borderWidth: 1 }] },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: { display: labels.length <= 32, position: 'right', labels: { color: '#374151', boxWidth: 10, font: { size: 9 } } },
+                tooltip: { callbacks: { label: (c) => (c.label ? c.label + ': ' : '') + Number(c.raw || 0).toFixed(2) + ' MW' } },
+              },
+            },
+          });
+          return;
+        }
+      }
+
+      function renderSupplyChart() {
+        const t = supplyTypeEl ? supplyTypeEl.value : 'line';
+        const labels = supplyState.labels;
+        const demandNet = supplyState.demandNet.map(v => Number(v) || 0);
+        const supplyNet = supplyState.supplyNet.map(v => Number(v) || 0);
+        if (plantSupplyChart) { plantSupplyChart.destroy(); plantSupplyChart = null; }
+        if (!supplyCanvas) return;
+
+        if (t === 'histogram') {
+          const { labels: hLabels, countA, countB } = createHistogramBinsDual(demandNet, supplyNet, 10);
+          plantSupplyChart = new Chart(supplyCanvas, {
+            type: 'bar',
+            data: {
+              labels: hLabels,
+              datasets: [
+                { label: 'Slots (demand net)', data: countA, backgroundColor: 'rgba(47,125,107,0.55)', borderColor: 'rgb(47,125,107)', borderWidth: 1 },
+                { label: 'Slots (approved supply net)', data: countB, backgroundColor: 'rgba(245,158,11,0.55)', borderColor: 'rgb(245,158,11)', borderWidth: 1 },
+              ],
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: { labels: { color: '#374151' } },
+                tooltip: { callbacks: { label: (c) => (c.dataset.label || '') + ': ' + String(c.raw) + ' slots' } },
+              },
+              scales: {
+                x: { ticks: { maxRotation: 45, color: '#6B7280' }, grid: { display: false } },
+                y: { beginAtZero: true, title: { display: true, text: 'Count', color: '#6B7280' }, ticks: { color: '#6B7280', stepSize: 1 }, grid: { color: '#E5E7EB' } },
+              },
+            },
+          });
+          return;
+        }
+        if (t === 'line') {
+          plantSupplyChart = new Chart(supplyCanvas, {
+            type: 'line',
+            data: {
+              labels,
+              datasets: [
+                { label: 'Demand (net)', data: demandNet, borderColor: 'rgb(47,125,107)', backgroundColor: 'rgba(47,125,107,0.12)', fill: false, tension: 0.4, pointRadius: 0, borderWidth: 2 },
+                { label: 'Approved supply (net)', data: supplyNet, borderColor: 'rgb(245,158,11)', backgroundColor: 'rgba(245,158,11,0.12)', fill: false, tension: 0.4, pointRadius: 0, borderWidth: 2 },
+              ],
+            },
+            options: chartOptsMWh,
+          });
+          return;
+        }
+        if (t === 'bar') {
+          plantSupplyChart = new Chart(supplyCanvas, {
+            type: 'bar',
+            data: {
+              labels,
+              datasets: [
+                { label: 'Demand (net)', data: demandNet, backgroundColor: 'rgba(47,125,107,0.65)', borderColor: 'rgb(47,125,107)', borderWidth: 1 },
+                { label: 'Approved supply (net)', data: supplyNet, backgroundColor: 'rgba(245,158,11,0.55)', borderColor: 'rgb(245,158,11)', borderWidth: 1 },
+              ],
+            },
+            options: chartOptsMWh,
+          });
+          return;
+        }
+        if (t === 'pie' || t === 'doughnut') {
+          const totalDem = demandNet.reduce((s, v) => s + v, 0);
+          const totalSup = supplyNet.reduce((s, v) => s + v, 0);
+          plantSupplyChart = new Chart(supplyCanvas, {
+            type: t,
+            data: {
+              labels: ['Total demand (net)', 'Total approved supply (net)'],
+              datasets: [{
+                data: [totalDem, totalSup],
+                backgroundColor: ['rgba(47,125,107,0.85)', 'rgba(245,158,11,0.75)'],
+                borderColor: '#fff',
+                borderWidth: 1,
+              }],
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: { display: true, labels: { color: '#374151' } },
+                tooltip: { callbacks: { label: (c) => (c.label || '') + ': ' + Number(c.raw || 0).toFixed(2) + ' MWh' } },
+              },
+            },
+          });
+          return;
+        }
+      }
+
+      async function loadPlantDemand() {
+        const dateStr = demandDayEl && demandDayEl.value;
+        const st = document.getElementById('plantDemandChartStatus');
+        if (!dateStr) return;
+        if (st) st.textContent = 'Loading…';
+        try {
+          const demandRes = await fetchWithAuth('/api/demand-entry/?date=' + encodeURIComponent(dateStr));
+          const demandData = await demandRes.json().catch(() => ({}));
+          const slots = demandData.slots || [];
+          demandState.labels = slots.map(s => s.time_block || s.slot_time || String(s.slot_index));
+          demandState.values = slots.map(s => parseFloat(s.demand_mw || 0));
+          renderDemandChart();
+          if (st) st.textContent = '';
+        } catch (e) {
+          if (st) st.textContent = 'Failed to load demand.';
+          if (plantDemandChart) { plantDemandChart.destroy(); plantDemandChart = null; }
+        }
+      }
+
+      async function loadPlantSupply() {
+        const dateStr = supplyDayEl && supplyDayEl.value;
+        const st = document.getElementById('plantSupplyChartStatus');
+        if (!dateStr) return;
+        if (st) st.textContent = 'Loading…';
+        try {
+          const slotsRes = await fetchWithAuth('/api/dashboard/slots/?date=' + encodeURIComponent(dateStr));
+          const slotsData = await slotsRes.json().catch(() => ({}));
+          const approved = !!slotsData.approved;
+          const pname = slotsData.plant_name || '';
+          if (pname) setPlantLabels(pname);
+          if (st) {
+            st.textContent = approved
+              ? ('Demand (net) vs approved supply (net) for ' + (pname || 'plant') + '.')
+              : 'Allocation not approved yet — approved supply shows as 0 until Consumer Manager approves.';
+          }
+          const rows = slotsData.slots || [];
+          supplyState.labels = rows.map(r => r.time_block || '');
+          supplyState.demandNet = rows.map(r => parseFloat(r.demand_net_mwh || 0));
+          supplyState.supplyNet = rows.map(r => parseFloat(r.approved_supply_net_mwh || 0));
+          renderSupplyChart();
+        } catch (e) {
+          if (st) st.textContent = 'Failed to load approved supply.';
+          if (plantSupplyChart) { plantSupplyChart.destroy(); plantSupplyChart = null; }
+        }
+      }
+
+      async function loadPlantSlotsTable(dateStr) {
+        const tableHintEl = document.getElementById('plantSlotApprovalHint');
+        const slotsTbody = document.getElementById('plantSlotsTbody');
+        try {
+          const slotsRes = await fetchWithAuth('/api/dashboard/slots/?date=' + encodeURIComponent(dateStr));
+          const slotsData = await slotsRes.json().catch(() => ({}));
+          const approved = !!slotsData.approved;
+          const pname = slotsData.plant_name || '';
+          if (pname) setPlantLabels(pname);
+          if (tableHintEl) {
+            tableHintEl.innerHTML = approved
+              ? ('Consumer Manager has <strong>approved</strong> allocation. Slot-wise data for <strong>' + pname + '</strong>.')
+              : 'Allocation is <strong>not approved yet</strong>. Supply values show as 0 until approval.';
+          }
+          const rows = slotsData.slots || [];
+          const fmtMwh = (v) => (v != null ? Number(v).toFixed(2).replace(/\.?0+$/, '') : '0');
+          if (slotsTbody) {
+            if (!rows.length) {
+              slotsTbody.innerHTML = '<tr><td colspan="5" class="muted">No slot data.</td></tr>';
+            } else {
+              slotsTbody.innerHTML = rows.map((r, i) => {
+                const diff = Number(r.difference_mwh || 0);
+                const diffStyle = diff > 0.0001 ? 'color:#b91c1c;' : (diff < -0.0001 ? 'color:#065f46;' : '');
+                return '<tr><td>' + (i + 1) + '</td><td>' + (r.time_block || '') + '</td><td>' + fmtMwh(r.demand_net_mwh) + '</td><td>' + fmtMwh(r.approved_supply_net_mwh) + '</td><td style="' + diffStyle + '">' + fmtMwh(diff) + '</td></tr>';
+              }).join('');
+            }
+          }
+        } catch (e) {
+          if (tableHintEl) tableHintEl.innerHTML = 'Failed to load slot data.';
+          if (slotsTbody) slotsTbody.innerHTML = '<tr><td colspan="5" class="muted">Failed to load slot-wise data.</td></tr>';
+        }
+      }
+
+      const allowedDates = buildAllowedDates();
+      const optsHtml = allowedDates.map(d => '<option value="' + d.dateStr + '">' + d.label + '</option>').join('');
+      if (demandDayEl) { demandDayEl.innerHTML = optsHtml; demandDayEl.value = allowedDates[0].dateStr; }
+      if (supplyDayEl) { supplyDayEl.innerHTML = optsHtml; supplyDayEl.value = allowedDates[0].dateStr; }
+      if (allocDaySelect) {
+        allocDaySelect.innerHTML = optsHtml;
+        allocDaySelect.value = allowedDates[0].dateStr;
+      }
+
+      if (demandDayEl) demandDayEl.addEventListener('change', () => { loadPlantDemand(); });
+      if (supplyDayEl) supplyDayEl.addEventListener('change', () => { loadPlantSupply(); });
+      if (demandTypeEl) demandTypeEl.addEventListener('change', () => { renderDemandChart(); });
+      if (supplyTypeEl) supplyTypeEl.addEventListener('change', () => { renderSupplyChart(); });
+      if (allocDaySelect) {
+        allocDaySelect.addEventListener('change', () => { loadPlantSlotsTable(allocDaySelect.value); });
+      }
+
+      if (plantPath === '/plant-user-dashboard/') {
+        loadPlantDemand();
+        loadPlantSupply();
+      } else if (plantPath === '/dashboard/') {
+        loadPlantSlotsTable(allocDaySelect && allocDaySelect.value ? allocDaySelect.value : allowedDates[0].dateStr);
+      }
+    }
+  </script>
+</body>
+</html>
+

@@ -1,0 +1,719 @@
+{% extends "dashboard/generator_base_kaiadmin.html" %}
+{% load static %}
+
+{% block title %}Generator Schedule — ViewMetric{% endblock %}
+
+{% block extra_head %}
+<style>
+  .kai-sched-table .table thead th {
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #95aac9;
+    font-weight: 600;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  }
+  .kai-sched-table .table tbody td { vertical-align: middle; padding-top: 0.9rem; padding-bottom: 0.9rem; }
+  .kai-sched-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: #fff;
+    flex-shrink: 0;
+    box-shadow: 0 4px 12px rgba(21, 114, 232, 0.25);
+  }
+  .kai-sched-avatar.alt { background: linear-gradient(135deg, #6861ce, #4c4b9e) !important; box-shadow: 0 4px 12px rgba(104, 97, 206, 0.3); }
+  .kai-sched-empty {
+    border: 1px dashed rgba(149, 170, 201, 0.45);
+    border-radius: 8px;
+    padding: 2rem 1.25rem;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+            <div id="schedulePageIntro" class="mb-4 pt-2">
+              <div class="page-pretitle">Supply schedule</div>
+              <h3 class="fw-bold mb-3">Generator Schedule</h3>
+              <div class="text-muted" style="max-width: 42rem; line-height: 1.65">
+                <p class="mb-2">
+                  This schedule ties <strong class="text-dark">planned generator output</strong> to <strong class="text-dark">approved consumer demand</strong>.
+                  Each energy manager below represents portfolios that already have generator demand cleared for the active planning day.
+                </p>
+                <p class="mb-0 small">
+                  Open a row to work through <strong class="text-dark">today and the next 7 days</strong>: enter or adjust supply by day, then submit for approval. Use <strong>Create</strong> only for dates from tomorrow onward. Days the energy manager has approved stay locked for editing.
+                </p>
+              </div>
+            </div>
+
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3" id="energyManagersHeadingRow">
+              <h5 class="fw-bold mb-0" id="energyManagersHeading">Energy managers</h5>
+              <button type="button" id="exportConsumerTableBtn" class="btn btn-outline-success btn-sm">
+                <span class="btn-label"><i class="fas fa-file-excel"></i></span>
+                Export Excel
+              </button>
+            </div>
+
+            <div id="consumerPanel" class="kai-sched-table">
+              <div id="consumerListSection">
+                <div id="consumersTableWrap" class="table-responsive">
+                  <table class="table table-hover align-middle mb-0" id="consumersTable">
+                    <thead>
+                      <tr>
+                        <th>Energy manager</th>
+                        <th class="text-end" style="width: 220px">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody></tbody>
+                  </table>
+                </div>
+                <div id="consumerEmptyState" class="kai-sched-empty text-center d-none">
+                  <div class="text-muted mb-3"><i class="fas fa-inbox fa-2x opacity-50"></i></div>
+                  <p class="fw-semibold text-dark mb-2">No energy managers for this planning day</p>
+                  <p class="text-muted small mb-0 mx-auto" style="max-width: 26rem">No portfolios currently have approved generator demand for the day in use. Confirm demand approval on the consumer side, then refresh.</p>
+                </div>
+              </div>
+
+              <div id="dayListSection" class="d-none mt-2">
+                <div class="d-flex flex-wrap align-items-center gap-2 mb-4 pb-3 border-bottom">
+                  <button type="button" id="backToConsumersBtn" class="btn btn-label-secondary btn-sm">
+                    <span class="btn-label"><i class="fas fa-arrow-left"></i></span>
+                    Back to list
+                  </button>
+                  <div class="flex-grow-1"></div>
+                  <div class="text-end">
+                    <span class="text-muted small d-block">Energy manager</span>
+                    <span class="fw-bold text-dark" id="selectedConsumerName"></span>
+                  </div>
+                </div>
+
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-1">
+                  <h5 class="fw-bold mb-0">Supply window</h5>
+                  <div class="d-flex flex-wrap align-items-center gap-2">
+                    <button type="button" id="exportDayTableBtn" class="btn btn-outline-success btn-sm">
+                      <span class="btn-label"><i class="fas fa-file-excel"></i></span>
+                      Export Excel
+                    </button>
+                    <button type="button" id="createScheduleBtn" class="btn btn-success btn-sm">
+                      <span class="btn-label"><i class="fas fa-plus"></i></span>
+                      Create
+                    </button>
+                  </div>
+                </div>
+                <p class="text-muted small mb-3">Today and the next 7 days (8 rows). Use <strong>Create</strong> for future dates only (tomorrow onward). Approved days cannot be edited.</p>
+
+                <div class="table-responsive">
+                  <table class="table table-hover align-middle mb-0" id="daysTable">
+                    <thead>
+                      <tr>
+                        <th style="width: 220px">Date</th>
+                        <th style="width: 180px">Status</th>
+                        <th class="text-end" style="width: 240px">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody></tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="text-muted small mt-3" id="statusMsg" aria-live="polite"></div>
+            </div>
+
+            <div class="modal fade" id="createScheduleModal" tabindex="-1" aria-hidden="true">
+              <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title fw-bold">Create Supply Schedule</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                  </div>
+                  <div class="modal-body">
+                    <p class="text-muted small mb-3">Select a date (tomorrow onward — today is excluded). Already scheduled dates are blocked.</p>
+                    <div id="createCalendarGrid" class="row g-2"></div>
+                    <div id="createCalendarMessage" class="alert alert-warning d-none mt-3 mb-0">
+                      Date already scheduled. Go back and click <strong>Update</strong> from the previous page.
+                    </div>
+                  </div>
+                  <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="modal fade" id="inputMethodModal" tabindex="-1" aria-hidden="true">
+              <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title fw-bold">Choose Input Method</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                  </div>
+                  <div class="modal-body">
+                    <p class="text-muted small mb-3">Select how you want to create supply data for <strong id="inputMethodSelectedDate"></strong>.</p>
+                    <div class="d-grid gap-2">
+                      <button type="button" class="btn btn-outline-primary text-start btnMethodSelect" data-method="manual">
+                        <i class="fas fa-keyboard me-2"></i> Manual entry
+                      </button>
+                      <button type="button" class="btn btn-outline-success text-start btnMethodSelect" data-method="excel">
+                        <i class="fas fa-file-excel me-2"></i> Excel upload
+                      </button>
+                      <button type="button" class="btn btn-outline-info text-start btnMethodSelect" data-method="api">
+                        <i class="fas fa-cloud-download-alt me-2"></i> Fetch data (API)
+                      </button>
+                    </div>
+                  </div>
+                  <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<script>
+(function () {
+  var fetchWithAuth = window.kaiFetchWithAuth;
+  if (!fetchWithAuth) return;
+
+  function setStatus(msg) {
+    var el = document.getElementById('statusMsg');
+    if (el) el.textContent = msg || '';
+  }
+
+  function escapeHtml(s) {
+    if (s == null || s === '') return '';
+    var div = document.createElement('div');
+    div.textContent = s;
+    return div.innerHTML;
+  }
+
+  function initials(name) {
+    if (!name || !String(name).trim()) return '?';
+    var parts = String(name).trim().split(/\s+/);
+    if (parts.length >= 2) return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
+    return name.slice(0, 2).toUpperCase();
+  }
+
+  function toDateStr(d) {
+    var yyyy = d.getFullYear();
+    var mm = String(d.getMonth() + 1).padStart(2, '0');
+    var dd = String(d.getDate()).padStart(2, '0');
+    return yyyy + '-' + mm + '-' + dd;
+  }
+
+  /** Main table + URL picker: today through today + 7 days (8 calendar days). */
+  function buildTableAllowedDates() {
+    var base = new Date();
+    base.setHours(0, 0, 0, 0);
+    var out = [];
+    for (var i = 0; i < 8; i++) {
+      var d = new Date(base.getTime() + i * 24 * 60 * 60 * 1000);
+      var lab =
+        i === 0
+          ? 'Today'
+          : i === 1
+            ? 'Tomorrow'
+            : d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+      out.push({
+        dateStr: toDateStr(d),
+        label: lab,
+      });
+    }
+    return out;
+  }
+
+  /** Create modal only: next 7 days starting tomorrow (today excluded). */
+  function buildCreateAllowedDates() {
+    var base = new Date();
+    base.setHours(0, 0, 0, 0);
+    var tomorrow = new Date(base.getTime() + 24 * 60 * 60 * 1000);
+    var out = [];
+    for (var i = 0; i < 7; i++) {
+      var d = new Date(tomorrow.getTime() + i * 24 * 60 * 60 * 1000);
+      var lab =
+        i === 0
+          ? 'Tomorrow'
+          : d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+      out.push({
+        dateStr: toDateStr(d),
+        label: lab,
+      });
+    }
+    return out;
+  }
+
+  var params = new URLSearchParams(window.location.search);
+  var dateParam = params.get('date');
+  var allowedDates = buildTableAllowedDates();
+  var allowedSet = {};
+  allowedDates.forEach(function (x) {
+    allowedSet[x.dateStr] = true;
+  });
+  var dateStrForPage = dateParam && allowedSet[dateParam] ? dateParam : allowedDates[0].dateStr;
+
+  var consumersTableBody = document.getElementById('consumersTable').querySelector('tbody');
+  var daysTbody = document.getElementById('daysTable').querySelector('tbody');
+  var consumerListSection = document.getElementById('consumerListSection');
+  var dayListSection = document.getElementById('dayListSection');
+  var backToConsumersBtn = document.getElementById('backToConsumersBtn');
+  var selectedConsumerNameEl = document.getElementById('selectedConsumerName');
+  var consumersTableWrap = document.getElementById('consumersTableWrap');
+  var consumerEmptyState = document.getElementById('consumerEmptyState');
+  var schedulePageIntro = document.getElementById('schedulePageIntro');
+  var energyManagersHeading = document.getElementById('energyManagersHeading');
+  var energyManagersHeadingRow = document.getElementById('energyManagersHeadingRow');
+  var exportConsumerTableBtn = document.getElementById('exportConsumerTableBtn');
+  var exportDayTableBtn = document.getElementById('exportDayTableBtn');
+  var createScheduleBtn = document.getElementById('createScheduleBtn');
+  var createScheduleModalEl = document.getElementById('createScheduleModal');
+  var createCalendarGrid = document.getElementById('createCalendarGrid');
+  var createCalendarMessage = document.getElementById('createCalendarMessage');
+  var inputMethodModalEl = document.getElementById('inputMethodModal');
+  var inputMethodSelectedDateEl = document.getElementById('inputMethodSelectedDate');
+  var selectedCreateDate = '';
+
+  var cmUserIdParam = params.get('cm_user_id');
+
+  function exportTableToExcel(tableId, fileName) {
+    var table = document.getElementById(tableId);
+    if (!table) {
+      setStatus('Table not found for export.');
+      return;
+    }
+    if (!window.XLSX) {
+      setStatus('Excel export library not loaded.');
+      return;
+    }
+
+    var rows = [];
+    var headers = Array.from(table.querySelectorAll('thead th')).map(function (th) {
+      return (th.textContent || '').trim();
+    });
+    rows.push(headers);
+
+    Array.from(table.querySelectorAll('tbody tr')).forEach(function (tr) {
+      if (tr.classList.contains('d-none')) return;
+      var cells = Array.from(tr.querySelectorAll('td')).map(function (td) {
+        return (td.textContent || '').replace(/\s+/g, ' ').trim();
+      });
+      if (cells.length) rows.push(cells);
+    });
+
+    var ws = XLSX.utils.aoa_to_sheet(rows);
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Data');
+    XLSX.writeFile(wb, fileName);
+  }
+
+  function fmtDayLabel(dateStr) {
+    var d = new Date(dateStr + 'T12:00:00');
+    return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  }
+
+  function todayDateStr() {
+    var base = new Date();
+    base.setHours(0, 0, 0, 0);
+    return toDateStr(base);
+  }
+
+  /** Table + modals: show Today / Tomorrow / weekday date. */
+  function fmtScheduleDayTitle(dateStr) {
+    var t = todayDateStr();
+    if (dateStr === t) return 'Today';
+    var tom = new Date();
+    tom.setHours(0, 0, 0, 0);
+    tom.setTime(tom.getTime() + 24 * 60 * 60 * 1000);
+    if (dateStr === toDateStr(tom)) return 'Tomorrow';
+    return fmtDayLabel(dateStr);
+  }
+
+  function renderDaysSkeleton(days) {
+    daysTbody.innerHTML = '';
+    days.forEach(function (d) {
+      var tr = document.createElement('tr');
+      tr.dataset.date = d.dateStr;
+      tr.innerHTML =
+        '<td><span class="fw-semibold">' +
+        escapeHtml(fmtScheduleDayTitle(d.dateStr)) +
+        '</span><br><small class="text-muted">' +
+        escapeHtml(d.dateStr) +
+        '</small></td>' +
+        '<td class="statusCell"><span class="badge bg-secondary">Loading…</span></td>' +
+        '<td class="text-end text-nowrap">' +
+        '<button class="btn btn-sm btn-secondary btnViewDay" type="button" data-date="' +
+        d.dateStr +
+        '"><span class="btn-label"><i class="fas fa-eye"></i></span> View</button> ' +
+        '<button class="btn btn-sm btn-primary ms-1 btnEditDay" type="button" data-date="' +
+        d.dateStr +
+        '"><span class="btn-label"><i class="fas fa-edit"></i></span> Update</button> ' +
+        '<button class="btn btn-sm btn-outline-danger ms-1 btnDeleteDay d-none" type="button" data-date="' +
+        d.dateStr +
+        '"><span class="btn-label"><i class="fas fa-trash-alt"></i></span> Delete</button>' +
+        '</td>';
+      daysTbody.appendChild(tr);
+    });
+  }
+
+  function statusBadge(htmlClass, label) {
+    return '<span class="badge ' + htmlClass + '">' + escapeHtml(label) + '</span>';
+  }
+
+  async function loadDayStatusForConsumer(cmUserId, dateStr) {
+    var res = await fetchWithAuth(
+      '/api/generator/supply/?consumer_manager_user_id=' +
+        encodeURIComponent(cmUserId) +
+        '&date=' +
+        encodeURIComponent(dateStr)
+    );
+    var data = await res.json().catch(function () {
+      return {};
+    });
+    if (!res.ok) return { ok: false, detail: data.detail || 'Failed' };
+    return {
+      ok: true,
+      exists: !!data.exists,
+      consumer_name: data.consumer_name || '',
+      energy_manager_name: data.energy_manager_name || '',
+      allocation_approved: !!data.allocation_approved,
+    };
+  }
+
+  async function deleteDaySchedule(cmUserId, dateStr) {
+    var ok = window.confirm('Delete saved schedule for ' + dateStr + '?');
+    if (!ok) return;
+
+    setStatus('Deleting schedule...');
+    var res = await fetchWithAuth(
+      '/api/generator/supply/?consumer_manager_user_id=' +
+        encodeURIComponent(cmUserId) +
+        '&date=' +
+        encodeURIComponent(dateStr),
+      { method: 'DELETE' }
+    );
+    var data = await res.json().catch(function () {
+      return {};
+    });
+
+    if (!res.ok) {
+      setStatus(data.detail || 'Failed to delete schedule.');
+      return;
+    }
+
+    setStatus('Schedule deleted for ' + dateStr + '.');
+    await showDayListForConsumer(cmUserId);
+  }
+
+  async function showDayListForConsumer(cmUserId) {
+    if (consumerListSection) consumerListSection.classList.add('d-none');
+    if (dayListSection) dayListSection.classList.remove('d-none');
+    if (schedulePageIntro) schedulePageIntro.classList.add('d-none');
+    if (energyManagersHeadingRow) energyManagersHeadingRow.classList.add('d-none');
+    if (backToConsumersBtn) {
+      backToConsumersBtn.onclick = function () {
+        window.location.href = '/generator-allocation/?date=' + encodeURIComponent(dateStrForPage);
+      };
+    }
+    setStatus('Loading schedule days...');
+    var days = buildTableAllowedDates();
+    renderDaysSkeleton(days);
+
+    var headerEnergyName = '';
+    await Promise.all(
+      days.map(async function (d) {
+        var row = daysTbody.querySelector('tr[data-date="' + d.dateStr + '"]');
+        var st = await loadDayStatusForConsumer(cmUserId, d.dateStr);
+        if (!row) return;
+        var statusCell = row.querySelector('.statusCell');
+        var baseCell = 'statusCell';
+        if (!st.ok) {
+          statusCell.className = baseCell;
+          statusCell.innerHTML = statusBadge('bg-danger', 'Error');
+          return;
+        }
+        if (st.energy_manager_name && !headerEnergyName) {
+          headerEnergyName = st.energy_manager_name;
+          if (selectedConsumerNameEl) selectedConsumerNameEl.textContent = headerEnergyName;
+        }
+        if (st.allocation_approved) {
+          statusCell.className = baseCell;
+          statusCell.innerHTML = statusBadge('bg-success', 'Approved');
+        } else if (st.exists) {
+          statusCell.className = baseCell;
+          statusCell.innerHTML = statusBadge('bg-warning text-dark', 'Scheduled');
+        } else {
+          statusCell.className = baseCell;
+          statusCell.innerHTML = statusBadge('bg-secondary', 'Not scheduled');
+        }
+
+        var editBtn = row.querySelector('.btnEditDay');
+        if (editBtn) {
+          editBtn.disabled = !!st.allocation_approved;
+          editBtn.title = st.allocation_approved ? 'Approved by Energy Manager. Editing locked.' : '';
+          if (!st.allocation_approved) {
+            if (st.exists) {
+              editBtn.classList.remove('btn-success');
+              editBtn.classList.add('btn-primary');
+              editBtn.innerHTML = '<span class="btn-label"><i class="fas fa-edit"></i></span> Update';
+            } else {
+              editBtn.classList.remove('btn-primary');
+              editBtn.classList.add('btn-success');
+              editBtn.innerHTML = '<span class="btn-label"><i class="fas fa-plus"></i></span> Create';
+            }
+          } else {
+            editBtn.classList.remove('btn-success');
+            editBtn.classList.add('btn-primary');
+            editBtn.innerHTML = '<span class="btn-label"><i class="fas fa-edit"></i></span> Update';
+          }
+        }
+
+        var deleteBtn = row.querySelector('.btnDeleteDay');
+        if (deleteBtn) {
+          var canDelete = st.exists && !st.allocation_approved;
+          deleteBtn.classList.toggle('d-none', !canDelete);
+          deleteBtn.disabled = !canDelete;
+          deleteBtn.title = st.allocation_approved
+            ? 'Approved by Energy Manager. Deletion locked.'
+            : st.exists
+              ? ''
+              : 'No saved schedule to delete.';
+        }
+      })
+    );
+
+    daysTbody.querySelectorAll('.btnViewDay').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var d = btn.getAttribute('data-date');
+        window.location.href =
+          '/generator-allocation/edit/' + encodeURIComponent(cmUserId) + '/' + encodeURIComponent(d) + '/?mode=view';
+      });
+    });
+    daysTbody.querySelectorAll('.btnEditDay').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var d = btn.getAttribute('data-date');
+        window.location.href =
+          '/generator-allocation/edit/' + encodeURIComponent(cmUserId) + '/' + encodeURIComponent(d) + '/';
+      });
+    });
+    daysTbody.querySelectorAll('.btnDeleteDay').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var d = btn.getAttribute('data-date');
+        deleteDaySchedule(cmUserId, d);
+      });
+    });
+
+    setStatus('');
+  }
+
+  function setConsumerEmptyVisible(show) {
+    if (consumersTableWrap) consumersTableWrap.classList.toggle('d-none', show);
+    if (consumerEmptyState) consumerEmptyState.classList.toggle('d-none', !show);
+  }
+
+  async function loadConsumerManagers() {
+    var dateStr = dateStrForPage;
+    if (!dateStr) return;
+    setStatus('Loading consumer managers...');
+    var res = await fetchWithAuth('/api/generator/consumer-managers/?date=' + encodeURIComponent(dateStr));
+    var data = await res.json().catch(function () {
+      return {};
+    });
+    if (!res.ok) {
+      consumersTableBody.innerHTML =
+        '<tr><td colspan="2" class="text-danger py-4">Failed to load. ' + escapeHtml(data.detail || '') + '</td></tr>';
+      setConsumerEmptyVisible(false);
+      setStatus(data.detail || 'Failed to load');
+      return;
+    }
+
+    var items = data.results || [];
+
+    if (items.length === 0) {
+      consumersTableBody.innerHTML = '';
+      setConsumerEmptyVisible(true);
+      setStatus('');
+      return;
+    }
+
+    setConsumerEmptyVisible(false);
+    consumersTableBody.innerHTML = items
+      .map(function (c, idx) {
+        var em = c.energy_manager_name || c.consumer_name || '';
+        var ini = initials(em);
+        var avClass = idx % 2 === 1 ? 'kai-sched-avatar alt' : 'kai-sched-avatar bg-primary';
+        return (
+          '<tr>' +
+          '<td>' +
+          '<div class="d-flex align-items-center">' +
+          '<div class="' +
+          avClass +
+          '">' +
+          escapeHtml(ini) +
+          '</div>' +
+          '<div class="ms-3 min-w-0">' +
+          '<div class="fw-bold text-dark text-truncate" style="max-width: 320px">' +
+          escapeHtml(em) +
+          '</div>' +
+          '<small class="text-muted">Portfolio · approved for generator</small>' +
+          '</div>' +
+          '</div>' +
+          '</td>' +
+          '<td class="text-end">' +
+          '<button class="btn btn-primary btn-sm btnOpenDays" type="button" data-cm-user-id="' +
+          c.consumer_manager_user_id +
+          '" data-energy-manager-name="' +
+          encodeURIComponent(em) +
+          '">' +
+          '<span class="btn-label"><i class="fas fa-calendar-week"></i></span> Open schedule' +
+          '</button>' +
+          '</td>' +
+          '</tr>'
+        );
+      })
+      .join('');
+
+    consumersTableBody.querySelectorAll('.btnOpenDays').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var cmUserId = btn.getAttribute('data-cm-user-id');
+        var raw = btn.getAttribute('data-energy-manager-name');
+        var emName = raw ? decodeURIComponent(raw) : '';
+        if (selectedConsumerNameEl) selectedConsumerNameEl.textContent = emName;
+        window.location.href =
+          '/generator-allocation/?date=' + encodeURIComponent(dateStrForPage) + '&cm_user_id=' + encodeURIComponent(cmUserId);
+      });
+    });
+
+    setStatus('');
+  }
+
+  loadConsumerManagers();
+
+  if (exportConsumerTableBtn) {
+    exportConsumerTableBtn.addEventListener('click', function () {
+      exportTableToExcel('consumersTable', 'generator_energy_managers_' + dateStrForPage + '.xlsx');
+    });
+  }
+
+  if (exportDayTableBtn) {
+    exportDayTableBtn.addEventListener('click', function () {
+      var cm = cmUserIdParam || 'selected';
+      exportTableToExcel('daysTable', 'generator_day_schedule_' + cm + '_' + dateStrForPage + '.xlsx');
+    });
+  }
+
+  if (cmUserIdParam) {
+    showDayListForConsumer(cmUserIdParam);
+  }
+
+  async function renderCreateCalendar(cmUserId) {
+    if (!createCalendarGrid) return;
+    createCalendarGrid.innerHTML = '';
+    if (createCalendarMessage) createCalendarMessage.classList.add('d-none');
+
+    var days = buildCreateAllowedDates();
+    var loaded = await Promise.all(
+      days.map(async function (d) {
+        var st = await loadDayStatusForConsumer(cmUserId, d.dateStr);
+        return { d: d, st: st };
+      })
+    );
+    loaded.sort(function (a, b) {
+      return a.d.dateStr.localeCompare(b.d.dateStr);
+    });
+
+    loaded.forEach(function (item) {
+      var d = item.d;
+      var st = item.st;
+      var isBlocked = st.ok && (st.exists || st.allocation_approved);
+      var statusLabel = st.allocation_approved ? 'Approved' : st.exists ? 'Scheduled' : 'Available';
+      var badgeClass = st.allocation_approved
+        ? 'bg-success'
+        : st.exists
+          ? 'bg-warning text-dark'
+          : 'bg-primary';
+
+      var col = document.createElement('div');
+      col.className = 'col-6';
+      var btnClass = isBlocked ? 'btn-light border text-muted' : 'btn-outline-primary';
+      col.innerHTML =
+        '<button type="button" class="btn w-100 text-start p-2 ' +
+        btnClass +
+        '" data-date="' +
+        escapeHtml(d.dateStr) +
+        '" data-blocked="' +
+        (isBlocked ? '1' : '0') +
+        '">' +
+        '<div class="d-flex justify-content-between align-items-center">' +
+        '<span class="fw-semibold">' +
+        escapeHtml(fmtScheduleDayTitle(d.dateStr)) +
+        '</span>' +
+        '<span class="badge ' +
+        badgeClass +
+        '">' +
+        escapeHtml(statusLabel) +
+        '</span>' +
+        '</div>' +
+        '<small class="text-muted">' +
+        escapeHtml(d.dateStr) +
+        '</small>' +
+        '</button>';
+      createCalendarGrid.appendChild(col);
+    });
+
+    createCalendarGrid.querySelectorAll('button[data-date]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var d = btn.getAttribute('data-date');
+        var blocked = btn.getAttribute('data-blocked') === '1';
+        if (blocked) {
+          if (createCalendarMessage) createCalendarMessage.classList.remove('d-none');
+          return;
+        }
+        selectedCreateDate = d;
+        if (inputMethodSelectedDateEl) inputMethodSelectedDateEl.textContent = d;
+
+        var createModal = bootstrap.Modal.getInstance(createScheduleModalEl);
+        if (createModal) createModal.hide();
+
+        if (inputMethodModalEl) {
+          var methodModal = new bootstrap.Modal(inputMethodModalEl);
+          methodModal.show();
+        }
+      });
+    });
+  }
+
+  if (createScheduleBtn && createScheduleModalEl) {
+    createScheduleBtn.addEventListener('click', async function () {
+      if (!cmUserIdParam) {
+        setStatus('Select an energy manager first.');
+        return;
+      }
+      await renderCreateCalendar(cmUserIdParam);
+      var modal = new bootstrap.Modal(createScheduleModalEl);
+      modal.show();
+    });
+  }
+
+  if (inputMethodModalEl) {
+    inputMethodModalEl.querySelectorAll('.btnMethodSelect').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (!cmUserIdParam || !selectedCreateDate) return;
+        var method = btn.getAttribute('data-method') || 'manual';
+        window.location.href =
+          '/generator-allocation/edit/' +
+          encodeURIComponent(cmUserIdParam) +
+          '/' +
+          encodeURIComponent(selectedCreateDate) +
+          '/?method=' +
+          encodeURIComponent(method);
+      });
+    });
+  }
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,80 @@
+{# Overrides legacy static/css/app.css blues when templates still use .btn / .nav-item.active #}
+<style>
+  :root {
+    --primary: #2F7D6B;
+    --primary2: #256a5c;
+  }
+  /* ViewMetric: do not apply legacy .sidebar (dark slate) — aside uses .vm-sidebar-column */
+  aside.vm-sidebar-column {
+    background: #ffffff !important;
+    color: #111827 !important;
+    width: 16rem !important;
+    padding: 0 !important;
+  }
+  /* Legacy .nav-item targets light text on dark bg; force readable text on white sidebar */
+  .vm-sidebar-panel a.nav-item.vm-nav-item,
+  .vm-sidebar-panel .sidebar-nav a.nav-item {
+    color: #374151 !important;
+    padding: 0.5rem 0.75rem !important;
+    border-radius: 0.5rem !important;
+  }
+  .vm-sidebar-panel a.nav-item.vm-nav-item:hover {
+    background: rgba(47, 125, 107, 0.08) !important;
+    color: #111827 !important;
+  }
+  .vm-sidebar-panel .sidebar-nav .nav-item.active,
+  .vm-sidebar-panel a.nav-item.vm-nav-item.active {
+    background: rgba(47, 125, 107, 0.12) !important;
+    color: #2F7D6B !important;
+  }
+  .vm-sidebar-panel li[class*="bg-primary"] a.nav-item {
+    color: #2F7D6B !important;
+    font-weight: 600 !important;
+  }
+  .btn.btn-secondary {
+    background: #E8B84C !important;
+    color: #fff !important;
+  }
+  .btn.btn-secondary:hover {
+    background: #d4a43f !important;
+  }
+  .btn:not(.btn-secondary) {
+    background: #2F7D6B !important;
+    color: #fff !important;
+  }
+  .btn:not(.btn-secondary):hover {
+    background: #256a5c !important;
+  }
+  .sidebar-nav .nav-item.active,
+  .nav-item.active {
+    background: rgba(47, 125, 107, 0.1) !important;
+    color: #2F7D6B !important;
+  }
+  /* Plant Management: inputs use .form-grid without .form — explicit field chrome */
+  .vm-pm-input {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    line-height: 1.4;
+    color: #111827;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+    outline: none;
+  }
+  .vm-pm-input:focus {
+    border-color: rgba(47, 125, 107, 0.55);
+    box-shadow: 0 0 0 3px rgba(47, 125, 107, 0.12);
+  }
+  .form input:focus,
+  .form select:focus,
+  .form-grid input:focus,
+  .form-grid select:focus {
+    border-color: rgba(47, 125, 107, 0.45) !important;
+  }
+  .mini-input:focus {
+    border-color: rgba(47, 125, 107, 0.45) !important;
+  }
+</style>

@@ -1,0 +1,402 @@
+{% extends "dashboard/plant_user_base_kaiadmin.html" %}
+{% load static %}
+
+{% block title %}Allocations — ViewMetric{% endblock %}
+
+{% block extra_head %}
+<style>
+  .kai-edit-slots-wrap {
+    max-height: min(65vh, 600px);
+    overflow: auto;
+    border-radius: 12px;
+    border: 1px solid rgba(21, 114, 232, 0.18);
+    box-shadow: 0 6px 24px rgba(21, 114, 232, 0.1);
+    background: #fff;
+  }
+  .kai-edit-slots-table {
+    margin-bottom: 0;
+    --bs-table-striped-bg: rgba(21, 114, 232, 0.055);
+    --bs-table-hover-bg: rgba(21, 114, 232, 0.12);
+    border-color: transparent;
+  }
+  .kai-edit-slots-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: #fff !important;
+    border: none !important;
+    padding-top: 0.9rem !important;
+    padding-bottom: 0.9rem !important;
+    background: linear-gradient(135deg, #1572e8 0%, #1269db 48%, #0d5bbd 100%) !important;
+    box-shadow: 0 3px 10px rgba(21, 114, 232, 0.35);
+  }
+  .kai-edit-slots-table tbody td {
+    vertical-align: middle;
+    padding-top: 0.55rem;
+    padding-bottom: 0.55rem;
+    border-color: rgba(21, 114, 232, 0.1);
+  }
+  .kai-slot-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.1rem;
+    padding: 0.28rem 0.55rem;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 0.8rem;
+    line-height: 1;
+    color: #fff;
+    background: linear-gradient(135deg, #6861ce 0%, #4c4b9e 100%);
+    box-shadow: 0 2px 8px rgba(104, 97, 206, 0.35);
+  }
+  .kai-slot-pill.alt {
+    background: linear-gradient(135deg, #1572e8 0%, #0d5bbd 100%);
+    box-shadow: 0 2px 8px rgba(21, 114, 232, 0.3);
+  }
+  .kai-time-label {
+    color: #1269db;
+    font-weight: 600;
+  }
+  .kai-hour-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.25rem;
+    padding: 0.25rem 0.45rem;
+    border-radius: 6px;
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: #0d5bbd;
+    background: rgba(21, 114, 232, 0.14);
+    border: 1px solid rgba(21, 114, 232, 0.25);
+  }
+  .kai-alloc-metric {
+    display: inline-block;
+    min-width: 4.25rem;
+    max-width: 7rem;
+    width: 100%;
+    padding: 0.35rem 0.6rem;
+    border: 1px solid rgba(108, 117, 125, 0.28);
+    background: rgba(108, 117, 125, 0.14);
+    border-radius: 8px;
+    font-weight: 600;
+    color: #495057;
+    text-align: right;
+    font-size: 0.875rem;
+    line-height: 1.25;
+  }
+  .kai-alloc-metric.kai-alloc-diff-pos {
+    border-color: rgba(220, 53, 69, 0.35);
+    background: rgba(220, 53, 69, 0.1);
+    color: #b02a37;
+  }
+  .kai-alloc-metric.kai-alloc-diff-neg {
+    border-color: rgba(25, 135, 84, 0.35);
+    background: rgba(25, 135, 84, 0.1);
+    color: #146c43;
+  }
+  .kai-slot-approved-row td {
+    background: #e8f7e9 !important;
+  }
+  .kai-slot-yta-row td {
+    background: #fff7cc !important;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+            <div class="mb-3 pt-2">
+              <div class="page-pretitle">Allocations</div>
+              <h3 class="fw-bold mb-1">Slot-wise demand vs approved supply</h3>
+              <p class="text-muted small mb-0">96 slots per day. Values are net at plant after transmission loss.</p>
+            </div>
+
+            <div class="card card-round">
+              <div class="card-header">
+                <div class="card-head-row flex-wrap gap-3">
+                  <div class="card-title mb-0">96 slots</div>
+                  <div class="card-tools">
+                    <label class="small text-muted mb-0 me-2" for="plantAllocationsDaySelect">Select day</label>
+                    <select id="plantAllocationsDaySelect" class="form-select form-select-sm d-inline-block" style="min-width: 12rem" aria-label="Select day"></select>
+                  </div>
+                </div>
+              </div>
+              <div class="card-body">
+                <div class="text-muted small mb-3" id="plantSlotApprovalHint"></div>
+
+                <div class="kai-sched-table">
+                  <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                      <label class="small text-muted mb-0 fw-semibold text-uppercase" for="plantAllocHourFilter" style="letter-spacing: 0.06em">Hour</label>
+                      <select id="plantAllocHourFilter" class="form-select form-select-sm" style="min-width: 15rem" aria-label="Filter slots by hour">
+                        <option value="">All hours</option>
+                      </select>
+                    </div>
+                    <small class="text-muted" id="plantAllocHourHint">All 96 quarter-hour slots.</small>
+                  </div>
+
+                  <div class="kai-edit-slots-wrap table-responsive">
+                    <table class="table table-striped table-hover align-middle kai-edit-slots-table mb-0" id="plantSlotsTable">
+                      <thead>
+                        <tr>
+                          <th style="width: 76px">Hour</th>
+                          <th style="width: 72px">Slot</th>
+                          <th style="min-width: 9rem">Time block</th>
+                          <th>Demand (net)</th>
+                          <th>Approved supply (net)</th>
+                          <th>Difference</th>
+                        </tr>
+                      </thead>
+                      <tbody id="plantSlotsTbody">
+                        <tr><td colspan="6" class="text-muted small px-3 py-3">Select a day to load slot-wise details.</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+  try {
+    var t = localStorage.getItem('accessToken');
+    if (t) {
+      var payload = JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+      var r = String(payload.role || '').toUpperCase().replace(/\s+/g, '_');
+      if (r === 'CONSUMER_MANAGER') { window.location.replace('{% url "consumer_allocation" %}'); return; }
+      if (r === 'GENERATOR') { window.location.replace('{% url "generator_dashboard" %}'); return; }
+    }
+  } catch (e) {}
+
+  var fetchWithAuth = window.kaiFetchWithAuth;
+  if (!fetchWithAuth) return;
+
+  var plantwiseTimeslotVariationCount = 7;
+  async function refreshUserSlotVariationPrefs() {
+    try {
+      var res = await fetchWithAuth('/api/me/', { method: 'GET' });
+      var data = await res.json().catch(function () {
+        return {};
+      });
+      if (!res.ok) return;
+      var n = parseInt(data.plantwise_timeslot_variation_count, 10);
+      if (!Number.isNaN(n) && n >= 0 && n <= 96) plantwiseTimeslotVariationCount = n;
+    } catch (e) {}
+  }
+
+  function toDateStr(d) {
+    var yyyy = d.getFullYear();
+    var mm = String(d.getMonth() + 1).padStart(2, '0');
+    var dd = String(d.getDate()).padStart(2, '0');
+    return yyyy + '-' + mm + '-' + dd;
+  }
+
+  function buildAllowedDates() {
+    var base = new Date();
+    base.setHours(0, 0, 0, 0);
+    var out = [];
+    for (var i = 0; i < 7; i++) {
+      var d = new Date(base.getTime() + i * 24 * 60 * 60 * 1000);
+      out.push({
+        dateStr: toDateStr(d),
+        label: i === 0 ? 'Today' : d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }),
+      });
+    }
+    return out;
+  }
+
+  function fmtAlloc(v) {
+    var n = Number(v);
+    if (Number.isNaN(n)) return '0.0';
+    return n.toFixed(1);
+  }
+
+  function escapeHtml(s) {
+    if (s == null || s === '') return '';
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  var plantSlotsTbody = document.getElementById('plantSlotsTbody');
+  var hourFilterSelect = document.getElementById('plantAllocHourFilter');
+  var hourFilterHint = document.getElementById('plantAllocHourHint');
+  var slotsScrollWrap = document.querySelector('.kai-edit-slots-wrap');
+
+  function slotHourFromIndex(slotIndex) {
+    var si = parseInt(slotIndex, 10);
+    if (Number.isNaN(si)) return 0;
+    return Math.min(23, Math.max(0, Math.floor((si - 1) / 4)));
+  }
+
+  function lockedSlotCutoffForDate(dateStr) {
+    var now = new Date();
+    if (!dateStr || dateStr !== toDateStr(now)) return 0;
+    var mins = now.getHours() * 60 + now.getMinutes();
+    var nextQuarterMins = (Math.floor(mins / 15) + 1) * 15;
+    if (nextQuarterMins > 24 * 60) nextQuarterMins = 24 * 60;
+    return Math.min(96, Math.max(0, Math.floor(nextQuarterMins / 15)));
+  }
+
+  function slotIsLockedByClock(slotIdx, dateStr) {
+    var sid = Number(slotIdx) || 0;
+    return sid > 0 && sid <= lockedSlotCutoffForDate(dateStr);
+  }
+
+  function effectiveVisualLockCutoff(dateStr) {
+    var lock = lockedSlotCutoffForDate(dateStr);
+    var nowStr = toDateStr(new Date());
+    if (!dateStr || dateStr !== nowStr) return lock;
+    var extra = Math.max(0, plantwiseTimeslotVariationCount);
+    return Math.min(96, lock + extra);
+  }
+
+  function slotLooksReadonlyGreen(slotIdx, dateStr) {
+    var sid = Number(slotIdx) || 0;
+    return sid > 0 && sid <= effectiveVisualLockCutoff(dateStr);
+  }
+
+  function populateHourFilterOptions() {
+    if (!hourFilterSelect) return;
+    var keep = hourFilterSelect.value;
+    hourFilterSelect.innerHTML = '<option value="">All hours</option>';
+    for (var h = 0; h < 24; h++) {
+      var hh = String(h).padStart(2, '0');
+      var opt = document.createElement('option');
+      opt.value = String(h);
+      opt.textContent = 'Hour ' + hh + ' (' + hh + ':00 – ' + hh + ':45)';
+      hourFilterSelect.appendChild(opt);
+    }
+    if (keep !== '' && hourFilterSelect.querySelector('option[value="' + keep + '"]')) {
+      hourFilterSelect.value = keep;
+    }
+  }
+
+  function applyHourFilter() {
+    if (!hourFilterSelect || !plantSlotsTbody) return;
+    var v = hourFilterSelect.value;
+    var rows = plantSlotsTbody.querySelectorAll('tr[data-hour]');
+    rows.forEach(function (tr) {
+      if (v === '') tr.classList.remove('d-none');
+      else tr.classList.toggle('d-none', tr.getAttribute('data-hour') !== v);
+    });
+    if (hourFilterHint) {
+      if (v === '') hourFilterHint.textContent = 'All 96 quarter-hour slots.';
+      else
+        hourFilterHint.textContent =
+          'Showing hour ' + v + ' only (4 slots). Choose All hours for the full day.';
+    }
+    if (v !== '' && slotsScrollWrap) {
+      var first = plantSlotsTbody.querySelector('tr[data-hour="' + v + '"]');
+      if (first) first.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    }
+  }
+
+  populateHourFilterOptions();
+  if (hourFilterSelect) {
+    hourFilterSelect.addEventListener('change', applyHourFilter);
+  }
+
+  async function loadPlantSlotsTable(dateStr) {
+    var tableHintEl = document.getElementById('plantSlotApprovalHint');
+    var slotsTbody = plantSlotsTbody;
+    try {
+      var slotsRes = await fetchWithAuth('/api/dashboard/slots/?date=' + encodeURIComponent(dateStr));
+      var slotsData = await slotsRes.json().catch(function () { return {}; });
+      var approved = !!slotsData.approved;
+      var pname = slotsData.plant_name || '';
+      if (tableHintEl) {
+        var pn = escapeHtml(pname);
+        tableHintEl.innerHTML = approved
+          ? 'Consumer Manager has <strong>approved</strong> allocation. Slot-wise data for <strong>' + pn + '</strong>. Non-approved slots are shown as <strong>YTA (Yet to be Approved)</strong>. Color code: <span class="text-success fw-semibold">green</span> = approved slot, <span class="text-warning fw-semibold">yellow</span> = YTA (Yet to be Approved).'
+          : 'Allocation is <strong>not approved yet</strong>. Supply values show as 0 until approval.';
+      }
+      var rows = slotsData.slots || [];
+      if (!rows.length) {
+        slotsTbody.innerHTML = '<tr><td colspan="6" class="text-muted small px-3 py-3">No slot data.</td></tr>';
+        return;
+      }
+      slotsTbody.innerHTML = rows
+        .map(function (r, i) {
+          var idx = r.slot_index != null ? r.slot_index : i + 1;
+          var hour = slotHourFromIndex(idx);
+          var hh = String(hour).padStart(2, '0');
+          var pillClass = 'kai-slot-pill' + (i % 2 === 0 ? '' : ' alt');
+          // Same visual rule as CM plantwise: real-time lock plus optional buffer (Settings on CM account; default 7).
+          var slotApproved = slotLooksReadonlyGreen(idx, dateStr);
+          var diff = Number(r.difference_mwh || 0);
+          var diffMetricCls = 'kai-alloc-metric';
+          if (slotApproved) {
+            if (diff > 0.0001) diffMetricCls += ' kai-alloc-diff-pos';
+            else if (diff < -0.0001) diffMetricCls += ' kai-alloc-diff-neg';
+          } else {
+            diffMetricCls += ' text-muted';
+          }
+          var tb = escapeHtml(r.time_block || '');
+          var supplyCell = slotApproved
+            ? fmtAlloc(r.approved_supply_net_mwh)
+            : 'YTA';
+          var diffCell = slotApproved
+            ? fmtAlloc(diff)
+            : 'YTA';
+          var rowClass = slotApproved ? 'kai-slot-approved-row' : 'kai-slot-yta-row';
+          return (
+            '<tr class="' + rowClass + '" data-hour="' +
+            hour +
+            '"><td><span class="kai-hour-badge">' +
+            hh +
+            '</span></td><td><span class="' +
+            pillClass +
+            '">' +
+            escapeHtml(String(idx)) +
+            '</span></td><td><span class="kai-time-label">' +
+            tb +
+            '</span></td><td class="text-end"><span class="kai-alloc-metric">' +
+            fmtAlloc(r.demand_net_mwh) +
+            '</span></td><td class="text-end"><span class="kai-alloc-metric">' +
+            supplyCell +
+            '</span></td><td class="text-end"><span class="' +
+            diffMetricCls +
+            '">' +
+            diffCell +
+            '</span></td></tr>'
+          );
+        })
+        .join('');
+      applyHourFilter();
+    } catch (e) {
+      if (tableHintEl) tableHintEl.innerHTML = 'Failed to load slot data.';
+      slotsTbody.innerHTML = '<tr><td colspan="6" class="text-muted small px-3 py-3">Failed to load slot-wise data.</td></tr>';
+    }
+  }
+
+  var allowedDates = buildAllowedDates();
+  var allocDaySelect = document.getElementById('plantAllocationsDaySelect');
+  var optsHtml = allowedDates
+    .map(function (d) {
+      return '<option value="' + d.dateStr + '">' + d.label + '</option>';
+    })
+    .join('');
+  allocDaySelect.innerHTML = optsHtml;
+  allocDaySelect.value = allowedDates[0].dateStr;
+
+  allocDaySelect.addEventListener('change', function () {
+    loadPlantSlotsTable(allocDaySelect.value);
+  });
+
+  (async function initPlantAlloc() {
+    await refreshUserSlotVariationPrefs();
+    loadPlantSlotsTable(allocDaySelect.value);
+  })();
+})();
+</script>
+{% endblock %}

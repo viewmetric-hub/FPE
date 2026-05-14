@@ -1,0 +1,1306 @@
+{% extends "dashboard/generator_base_kaiadmin.html" %}
+{% load static %}
+
+{% block title %}Schedule Revisions — ViewMetric{% endblock %}
+
+{% block extra_head %}
+<style>
+  .kai-sched-table .table thead th {
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #95aac9;
+    font-weight: 600;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  }
+  .kai-sched-table .table tbody td { vertical-align: middle; padding-top: 0.9rem; padding-bottom: 0.9rem; }
+  .kai-sched-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: #fff;
+    flex-shrink: 0;
+    box-shadow: 0 4px 12px rgba(21, 114, 232, 0.25);
+  }
+  .kai-sched-avatar.alt { background: linear-gradient(135deg, #6861ce, #4c4b9e) !important; box-shadow: 0 4px 12px rgba(104, 97, 206, 0.3); }
+  .kai-sched-empty {
+    border: 1px dashed rgba(149, 170, 201, 0.45);
+    border-radius: 8px;
+    padding: 2rem 1.25rem;
+  }
+  .kai-rev-modal-table-wrap {
+    max-height: min(66vh, 560px);
+    overflow: auto;
+    border: 1px solid rgba(21, 114, 232, 0.14);
+    border-radius: 10px;
+  }
+  .kai-rev-diff-pos { color: #198754; font-weight: 700; }
+  .kai-rev-diff-neg { color: #dc3545; font-weight: 700; }
+  .kai-rev-diff-zero { color: #6c757d; font-weight: 700; }
+  .kai-rev-row-approved td {
+    background: rgba(25, 135, 84, 0.1) !important;
+    border-left: 4px solid #198754;
+  }
+  .kai-rev-row-pending td {
+    background: rgba(255, 193, 7, 0.12) !important;
+    border-left: 4px solid #ffc107;
+  }
+  .kai-rev-supply-changed {
+    background-color: rgba(25, 135, 84, 0.22) !important;
+    font-weight: 600;
+    color: #146c43;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+            <div id="schedulePageIntro" class="mb-4 pt-2">
+              <div class="page-pretitle">Schedule revisions</div>
+              <h3 class="fw-bold mb-3">Generator Schedule Revisions</h3>
+              <div class="text-muted" style="max-width: 42rem; line-height: 1.65">
+                <p class="mb-2">
+                  Review <strong class="text-dark">approved supply schedules</strong> per energy manager. Schedules load automatically when you open an energy manager. Use <strong>Add revision</strong> for manual entry or the Excel download → fill → upload flow.
+                </p>
+                <p class="mb-0 small">
+                  Pick a day from the rolling seven-day window (from today), then choose <strong>Open revisions</strong> on a portfolio.
+                </p>
+              </div>
+            </div>
+
+            <h5 class="fw-bold mb-3" id="energyManagersHeading">Energy managers</h5>
+
+            <div id="consumerPanel" class="kai-sched-table">
+              <div id="consumerListSection">
+                <div id="consumersTableWrap" class="table-responsive">
+                  <table class="table table-hover align-middle mb-0" id="consumersTable">
+                    <thead>
+                      <tr>
+                        <th>Energy manager</th>
+                        <th class="text-end" style="width: 220px">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody></tbody>
+                  </table>
+                </div>
+                <div id="consumerEmptyState" class="kai-sched-empty text-center d-none">
+                  <div class="text-muted mb-3"><i class="fas fa-inbox fa-2x opacity-50"></i></div>
+                  <p class="fw-semibold text-dark mb-2">No energy managers for this planning day</p>
+                  <p class="text-muted small mb-0 mx-auto" style="max-width: 26rem">No portfolios currently have approved generator demand for the day in use.</p>
+                </div>
+              </div>
+
+              <div id="dayListSection" class="d-none mt-2">
+                <div class="d-flex flex-wrap align-items-center gap-2 mb-4 pb-3 border-bottom">
+                  <button type="button" id="backToConsumersBtn" class="btn btn-label-secondary btn-sm">
+                    <span class="btn-label"><i class="fas fa-arrow-left"></i></span>
+                    Back to list
+                  </button>
+                  <div class="flex-grow-1"></div>
+                  <div class="text-end">
+                    <span class="text-muted small d-block">Energy manager</span>
+                    <span class="fw-bold text-dark" id="selectedConsumerName"></span>
+                  </div>
+                </div>
+
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-1">
+                  <h5 class="fw-bold mb-0">Approved schedule revisions</h5>
+                  <div class="d-flex flex-wrap align-items-center gap-2">
+                    <button type="button" id="exportRevisionsTableBtn" class="btn btn-sm btn-outline-success">
+                      <span class="btn-label"><i class="fas fa-file-excel"></i></span>
+                      Export Excel
+                    </button>
+                    <label class="small text-muted mb-0 fw-semibold text-uppercase" for="revisionDateSelect" style="letter-spacing: 0.06em">Day</label>
+                    <select id="revisionDateSelect" class="form-select form-select-sm" style="min-width: 14rem" aria-label="Revision day"></select>
+                    <button type="button" id="fetchRevisionsBtn" class="btn btn-sm btn-info">
+                      <span class="btn-label"><i class="fas fa-sync-alt"></i></span>
+                      Refresh
+                    </button>
+                  </div>
+                </div>
+                <p class="text-muted small mb-3">
+                  Approved schedules load automatically. Click <strong>Add revision</strong> to choose manual entry in the schedule editor, or Excel (download a prefilled sheet, edit, then upload). On <strong>today</strong>, locked slots stay fixed on save. Use <strong>Refresh</strong> to reload from the server.
+                </p>
+
+                <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+                  <button type="button" id="addRevisionBtn" class="btn btn-sm btn-primary">
+                    <span class="btn-label"><i class="fas fa-plus"></i></span>
+                    Add revision
+                  </button>
+                </div>
+
+                <input type="file" id="revisionExcelFileInput" class="d-none" accept=".xlsx,.xls" aria-hidden="true">
+
+                <div class="table-responsive">
+                  <table class="table table-hover align-middle mb-0" id="daysTable">
+                    <thead>
+                      <tr>
+                        <th style="width: 220px">Date</th>
+                        <th style="width: 220px">Revision</th>
+                        <th class="text-end" style="min-width: 280px">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody></tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="text-muted small mt-3" id="statusMsg" aria-live="polite"></div>
+            </div>
+
+            <div class="modal fade" id="addRevisionModal" tabindex="-1" aria-labelledby="addRevisionModalTitle" aria-hidden="true">
+              <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title fw-bold" id="addRevisionModalTitle">Add revision</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                  </div>
+                  <div class="modal-body">
+                    <p class="text-muted small mb-3">Pick how you want to update supply for this day.</p>
+                    <div class="d-grid gap-3">
+                      <button type="button" id="addRevisionManualBtn" class="btn btn-outline-primary text-start">
+                        <span class="fw-semibold"><i class="fas fa-keyboard me-2"></i>Manual entry</span>
+                        <span class="d-block small text-muted fw-normal mt-1">Open the full slot grid for this energy manager and day to type values directly.</span>
+                      </button>
+                      <div class="border rounded p-3 bg-light-subtle">
+                        <button type="button" id="addRevisionExcelBtn" class="btn btn-outline-success w-100 text-start">
+                          <span class="fw-semibold"><i class="fas fa-file-excel me-2"></i>Excel</span>
+                          <span class="text-muted fw-normal"> (download → fill → upload)</span>
+                        </button>
+                        <ol class="small text-muted mb-0 mt-3 ps-3">
+                          <li class="mb-2"><strong>Download</strong> — We save a prefilled workbook with only the slots you are allowed to change. Column headers stay <strong>Slot</strong>, <strong>Time block</strong>, <strong>Supply (MWh)</strong>.</li>
+                          <li class="mb-2"><strong>Fill</strong> — Edit the Supply column and save the file. On <strong>today</strong>, past quarter-hours and the next <strong>6</strong> slots after the current one are locked and are not in the file (you cannot change those by pasting extra rows).</li>
+                          <li><strong>Upload</strong> — Choose your saved file when prompted; we merge your edits and leave locked slots as already scheduled.</li>
+                        </ol>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="modal fade" id="revisionDetailModal" tabindex="-1" aria-hidden="true">
+              <div class="modal-dialog modal-xl modal-dialog-scrollable">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title fw-bold" id="revisionModalTitle">Revision Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                  </div>
+                  <div class="modal-body">
+                    <div class="d-flex flex-wrap gap-3 mb-3 align-items-baseline">
+                      <div class="small text-muted">Total generator supply: <strong class="text-dark" id="revScheduledTotal">0.0</strong> MWh</div>
+                      <div class="small text-muted d-none" id="revModalSummaryExtra"></div>
+                      <div class="small text-muted d-none" id="revModalFilteredHint"></div>
+                    </div>
+                    <div class="kai-rev-modal-table-wrap table-responsive">
+                      <table class="table table-striped table-hover align-middle mb-0" id="revisionSlotsTable">
+                        <thead>
+                          <tr id="revisionSlotsTheadRow">
+                            <th style="width: 72px">Slot</th>
+                            <th style="width: 180px">Time block</th>
+                            <th style="width: 140px">Supply (MWh)</th>
+                          </tr>
+                        </thead>
+                        <tbody></tbody>
+                      </table>
+                    </div>
+                  </div>
+                  <div class="modal-footer">
+                    <button type="button" id="exportRevisionDetailBtn" class="btn btn-outline-success">
+                      <i class="fas fa-file-excel me-1"></i> Export Excel
+                    </button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<script>
+(function () {
+  var fetchWithAuth = window.kaiFetchWithAuth;
+  if (!fetchWithAuth) return;
+
+  function setStatus(msg, tone) {
+    var el = document.getElementById('statusMsg');
+    if (!el) return;
+    el.textContent = msg || '';
+    el.className = 'small mt-3';
+    if (tone === 'success') el.className += ' text-success';
+    else if (tone === 'warning') el.className += ' text-warning';
+    else if (tone === 'danger') el.className += ' text-danger';
+    else el.className += ' text-muted';
+  }
+
+  function escapeHtml(s) {
+    if (s == null || s === '') return '';
+    var div = document.createElement('div');
+    div.textContent = s;
+    return div.innerHTML;
+  }
+
+  function initials(name) {
+    if (!name || !String(name).trim()) return '?';
+    var parts = String(name).trim().split(/\s+/);
+    if (parts.length >= 2) return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
+    return name.slice(0, 2).toUpperCase();
+  }
+
+  function toDateStr(d) {
+    var yyyy = d.getFullYear();
+    var mm = String(d.getMonth() + 1).padStart(2, '0');
+    var dd = String(d.getDate()).padStart(2, '0');
+    return yyyy + '-' + mm + '-' + dd;
+  }
+
+  function buildAllowedDates() {
+    var base = new Date();
+    base.setHours(0, 0, 0, 0);
+    var out = [];
+    for (var i = 0; i < 7; i++) {
+      var d = new Date(base.getTime() + i * 24 * 60 * 60 * 1000);
+      out.push({
+        dateStr: toDateStr(d),
+        label:
+          i === 0
+            ? 'Today (' + toDateStr(d) + ')'
+            : d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) +
+              ' (' +
+              toDateStr(d) +
+              ')',
+      });
+    }
+    return out;
+  }
+
+  function fmtDayLabel(dateStr) {
+    var d = new Date(dateStr + 'T12:00:00');
+    return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  }
+
+  function statusBadge(htmlClass, label) {
+    return '<span class="badge ' + htmlClass + '">' + escapeHtml(label) + '</span>';
+  }
+
+  var params = new URLSearchParams(window.location.search);
+  var dateParam = params.get('date');
+  var allowedDates = buildAllowedDates();
+  var allowedSet = {};
+  allowedDates.forEach(function (x) { allowedSet[x.dateStr] = true; });
+  var dateStrForPage = dateParam && allowedSet[dateParam] ? dateParam : allowedDates[0].dateStr;
+
+  var consumersTableBody = document.getElementById('consumersTable').querySelector('tbody');
+  var daysTbody = document.getElementById('daysTable').querySelector('tbody');
+  var consumerListSection = document.getElementById('consumerListSection');
+  var dayListSection = document.getElementById('dayListSection');
+  var backToConsumersBtn = document.getElementById('backToConsumersBtn');
+  var selectedConsumerNameEl = document.getElementById('selectedConsumerName');
+  var consumersTableWrap = document.getElementById('consumersTableWrap');
+  var consumerEmptyState = document.getElementById('consumerEmptyState');
+  var schedulePageIntro = document.getElementById('schedulePageIntro');
+  var energyManagersHeading = document.getElementById('energyManagersHeading');
+  var revisionDateSelect = document.getElementById('revisionDateSelect');
+  var exportRevisionsTableBtn = document.getElementById('exportRevisionsTableBtn');
+  var fetchRevisionsBtn = document.getElementById('fetchRevisionsBtn');
+  var revisionDetailModalEl = document.getElementById('revisionDetailModal');
+  var revisionModalTitle = document.getElementById('revisionModalTitle');
+  var revisionSlotsTbody = document.getElementById('revisionSlotsTable').querySelector('tbody');
+  var exportRevisionDetailBtn = document.getElementById('exportRevisionDetailBtn');
+  var revScheduledTotalEl = document.getElementById('revScheduledTotal');
+  var revisionExcelFileInput = document.getElementById('revisionExcelFileInput');
+  var pendingRevisionUpload = null;
+  var lastSupplyCache = {
+    cmUserId: '',
+    dateStr: '',
+    slots: [],
+    summary: [],
+    editableSlotRange: null,
+    uploadRevisions: [],
+  };
+
+  var cmUserIdParam = params.get('cm_user_id');
+  var currentCmUserId = cmUserIdParam || '';
+  var selectedRevisionDate = dateStrForPage;
+
+  function exportTableToExcel(tableId, fileName) {
+    var table = document.getElementById(tableId);
+    if (!table) {
+      setStatus('Table not found for export.');
+      return;
+    }
+    if (!window.XLSX) {
+      setStatus('Excel export library not loaded.');
+      return;
+    }
+
+    var rows = [];
+    var headers = Array.from(table.querySelectorAll('thead th')).map(function (th) {
+      return (th.textContent || '').trim();
+    });
+    rows.push(headers);
+
+    Array.from(table.querySelectorAll('tbody tr')).forEach(function (tr) {
+      if (tr.classList.contains('d-none')) return;
+      var cells = Array.from(tr.querySelectorAll('td')).map(function (td) {
+        return (td.textContent || '').replace(/\s+/g, ' ').trim();
+      });
+      if (cells.length) rows.push(cells);
+    });
+
+    var ws = XLSX.utils.aoa_to_sheet(rows);
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Data');
+    XLSX.writeFile(wb, fileName);
+  }
+
+  if (revisionDateSelect) {
+    revisionDateSelect.innerHTML = allowedDates
+      .map(function (d) {
+        return '<option value="' + d.dateStr + '">' + escapeHtml(d.label) + '</option>';
+      })
+      .join('');
+    revisionDateSelect.value = selectedRevisionDate;
+    revisionDateSelect.addEventListener('change', function () {
+      selectedRevisionDate = revisionDateSelect.value;
+      setStatus('');
+      loadConsumerManagers();
+      if (dayListSection && !dayListSection.classList.contains('d-none') && (currentCmUserId || cmUserIdParam)) {
+        loadApprovedRevisionsForConsumer(cmUserIdParam || currentCmUserId);
+      }
+    });
+  }
+
+  var SLOT_EDIT_BUFFER = 6;
+
+  function todayStrLocal() {
+    return toDateStr(new Date());
+  }
+
+  /** Minutes east of UTC (same as -Date.getTimezoneOffset()). Keeps slot locks aligned with browser local time. */
+  function clientTzOffsetMinutes() {
+    return -new Date().getTimezoneOffset();
+  }
+
+  function compareDateStr(a, b) {
+    if (a < b) return -1;
+    if (a > b) return 1;
+    return 0;
+  }
+
+  /**
+   * Prefer server bounds from GET /api/generator/supply/ (timezone matches saves).
+   * Fallback: client clock for today vs planning date (legacy).
+   */
+  function getEditableSlotRange(dateStr) {
+    var cached = lastSupplyCache.editableSlotRange;
+    if (
+      cached &&
+      lastSupplyCache.dateStr === dateStr &&
+      cached.first_editable_slot != null &&
+      cached.locked_through_slot != null
+    ) {
+      return {
+        firstEditable: parseInt(cached.first_editable_slot, 10),
+        lastEditable: 96,
+        lockedThrough: parseInt(cached.locked_through_slot, 10),
+      };
+    }
+    var today = todayStrLocal();
+    var c = compareDateStr(dateStr, today);
+    if (c > 0) {
+      return { firstEditable: 1, lastEditable: 96, lockedThrough: 0 };
+    }
+    if (c < 0) {
+      return { firstEditable: 97, lastEditable: 96, lockedThrough: 96 };
+    }
+    var now = new Date();
+    var mins = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+    var currentSlot = Math.floor(mins / 15) + 1;
+    if (currentSlot < 1) currentSlot = 1;
+    if (currentSlot > 96) currentSlot = 96;
+    var lockedThrough = Math.min(96, currentSlot + SLOT_EDIT_BUFFER);
+    var firstEditable = lockedThrough + 1;
+    return {
+      firstEditable: firstEditable,
+      lastEditable: 96,
+      lockedThrough: lockedThrough,
+      currentSlot: currentSlot,
+    };
+  }
+
+  function editableRangeHint(dateStr) {
+    var r = getEditableSlotRange(dateStr);
+    if (r.firstEditable > r.lastEditable) {
+      return 'No editable slots left today (current time + ' + SLOT_EDIT_BUFFER + ' slots are locked).';
+    }
+    if (r.lockedThrough === 0) {
+      return 'All 96 slots can be edited (future day).';
+    }
+    return (
+      'Editable slots: ' +
+      r.firstEditable +
+      '–' +
+      r.lastEditable +
+      ' (slots 1–' +
+      r.lockedThrough +
+      ' locked: elapsed time + ' +
+      SLOT_EDIT_BUFFER +
+      ' slot buffer).'
+    );
+  }
+
+  function timeBlockForSlot(slotIndex) {
+    var i = parseInt(slotIndex, 10);
+    if (Number.isNaN(i) || i < 1 || i > 96) return '';
+    var startMin = (i - 1) * 15;
+    var endMin = i * 15;
+    function fmtHm(totalMin) {
+      if (totalMin >= 24 * 60) return '24:00';
+      var h = Math.floor(totalMin / 60);
+      var mm = totalMin % 60;
+      return String(h).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
+    }
+    return fmtHm(startMin) + ' – ' + fmtHm(endMin);
+  }
+
+  /**
+   * opts.silentSuccess — if true, skip success setStatus (caller composes message).
+   * Returns object with ok (boolean) and included (number) when ok.
+   */
+  function downloadSupplyExcelForDay(slots, dateStr, revisionLabel, opts) {
+    opts = opts || {};
+    if (!window.XLSX) {
+      setStatus('Excel export library not loaded.');
+      return { ok: false };
+    }
+    var range = getEditableSlotRange(dateStr);
+    var rows = [['Slot', 'Time block', 'Supply (MWh)']];
+    var included = 0;
+    (slots || []).forEach(function (s) {
+      var idx = parseInt(s.slot_index, 10) || 0;
+      if (idx < range.firstEditable || idx > range.lastEditable) return;
+      var tb = s.time_block || s.slot_time || timeBlockForSlot(idx);
+      rows.push([idx, tb, num(s.supply_mwh)]);
+      included += 1;
+    });
+    if (!included) {
+      setStatus(
+        'No editable slots to export for this day (' + editableRangeHint(dateStr) + ')',
+        'warning'
+      );
+      return { ok: false };
+    }
+    var ws = XLSX.utils.aoa_to_sheet(rows);
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Editable supply');
+    var safe = String(revisionLabel || 'schedule').replace(/[^\w\-]+/g, '_');
+    XLSX.writeFile(wb, 'generator_supply_editable_' + dateStr + '_' + safe + '.xlsx');
+    if (!opts.silentSuccess) {
+      setStatus(
+        'Downloaded Excel (' +
+          included +
+          ' editable slots). ' +
+          editableRangeHint(dateStr),
+        'success'
+      );
+    }
+    return { ok: true, included: included };
+  }
+
+  function buildSupplyMapFromSlots(existingSlots) {
+    var byIndex = {};
+    (existingSlots || []).forEach(function (s) {
+      var idx = parseInt(s.slot_index, 10);
+      if (!Number.isNaN(idx)) byIndex[idx] = num(s.supply_mwh);
+    });
+    return byIndex;
+  }
+
+  function mergeExcelIntoSchedule(existingSlots, excelMap, dateStr) {
+    var range = getEditableSlotRange(dateStr);
+    var byIndex = buildSupplyMapFromSlots(existingSlots);
+    var ignoredLocked = false;
+    Object.keys(excelMap).forEach(function (k) {
+      var si = parseInt(k, 10);
+      if (Number.isNaN(si) || si < 1 || si > 96) return;
+      if (si < range.firstEditable || si > range.lastEditable) {
+        ignoredLocked = true;
+        return;
+      }
+      byIndex[si] = num(excelMap[k]);
+    });
+    var payloadSlots = [];
+    for (var j = 1; j <= 96; j++) {
+      payloadSlots.push({
+        slot_index: j,
+        supply_mwh: String(num(byIndex[j] || 0).toFixed(4)),
+      });
+    }
+    return { payloadSlots: payloadSlots, ignoredLocked: ignoredLocked };
+  }
+
+  function parseExcelAndPostSupply(cmUserId, dateStr, file) {
+    if (!file) {
+      setStatus('Please choose an Excel file.');
+      return;
+    }
+    if (!window.XLSX) {
+      setStatus('Excel parser not available.');
+      return;
+    }
+    var existingSlots = lastSupplyCache.slots || [];
+    if (!existingSlots.length || lastSupplyCache.dateStr !== dateStr || String(lastSupplyCache.cmUserId) !== String(cmUserId)) {
+      setStatus('Schedule must be loaded first. Use Refresh if needed.', 'warning');
+      return;
+    }
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      try {
+        var data = new Uint8Array(e.target.result);
+        var workbook = XLSX.read(data, { type: 'array' });
+        var sheet = workbook.Sheets[workbook.SheetNames[0]];
+        var excelRows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' });
+        if (!excelRows || excelRows.length < 2) {
+          setStatus('Invalid Excel: no data rows found.');
+          return;
+        }
+        var header = (excelRows[0] || []).map(function (h) {
+          return String(h || '').toLowerCase();
+        });
+        var slotCol = header.findIndex(function (h) {
+          return h.indexOf('slot') !== -1;
+        });
+        var supplyCol = header.findIndex(function (h) {
+          return h.indexOf('supply') !== -1;
+        });
+        if (slotCol === -1) slotCol = 0;
+        if (supplyCol === -1) supplyCol = header.length > 1 ? header.length - 1 : 1;
+
+        var map = {};
+        for (var i = 1; i < excelRows.length; i++) {
+          var row = excelRows[i] || [];
+          var slot = parseInt(row[slotCol], 10);
+          var supply = parseFloat(row[supplyCol]);
+          if (!Number.isNaN(slot) && slot >= 1 && slot <= 96 && !Number.isNaN(supply)) {
+            map[slot] = supply;
+          }
+        }
+        var keys = Object.keys(map);
+        if (!keys.length) {
+          setStatus('No valid slot rows found in Excel.');
+          return;
+        }
+
+        var range = getEditableSlotRange(dateStr);
+        if (range.firstEditable > range.lastEditable) {
+          setStatus(editableRangeHint(dateStr), 'warning');
+          return;
+        }
+
+        var touchedEditable = false;
+        keys.forEach(function (k) {
+          var si = parseInt(k, 10);
+          if (si >= range.firstEditable && si <= range.lastEditable) touchedEditable = true;
+        });
+        if (!touchedEditable) {
+          setStatus('Excel contains no rows in the editable slot range. ' + editableRangeHint(dateStr), 'warning');
+          return;
+        }
+
+        var merged = mergeExcelIntoSchedule(existingSlots, map, dateStr);
+        var payloadSlots = merged.payloadSlots;
+
+        setStatus('Saving schedule from Excel…');
+        fetchWithAuth('/api/generator/supply/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            consumer_manager_user_id: parseInt(cmUserId, 10),
+            date: dateStr,
+            shutdown: false,
+            slots: payloadSlots,
+            client_tz_offset_minutes: clientTzOffsetMinutes(),
+          }),
+        })
+          .then(function (res) {
+            return res.json().then(function (body) {
+              return { res: res, body: body };
+            });
+          })
+          .then(function (x) {
+            if (!x.res.ok) {
+              setStatus(x.body.detail || 'Save failed.', 'danger');
+              return;
+            }
+            var msg = 'Schedule updated; locked slots kept prior values.';
+            if (merged.ignoredLocked) {
+              msg += ' Values in locked rows were ignored.';
+            }
+            setStatus(msg, 'success');
+            loadApprovedRevisionsForConsumer(cmUserId);
+          })
+          .catch(function () {
+            setStatus('Save failed.', 'danger');
+          });
+      } catch (err) {
+        setStatus('Failed to parse Excel: ' + (err && err.message ? err.message : 'Unknown error'));
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function num(v) {
+    var n = Number(v);
+    return Number.isNaN(n) ? 0 : n;
+  }
+
+  function fmt(v) {
+    return num(v).toFixed(2);
+  }
+
+  function revisionLabelFromKey(key) {
+    var map = {
+      submitted: 'Submitted schedule',
+      revision1: 'Revision 1',
+      revision3: 'Revision 3',
+      revision2: 'Approved allocation',
+    };
+    return map[key] || key || '';
+  }
+
+  function slotsForRevisionFilter(allSlots, revisionKey) {
+    if (revisionKey === '__supply__') return allSlots || [];
+    return (allSlots || []).filter(function (s) {
+      return String(s.allocation_revision || '') === String(revisionKey);
+    });
+  }
+
+  async function loadSupplyDay(cmUserId, dateStr) {
+    var res = await fetchWithAuth(
+      '/api/generator/supply/?consumer_manager_user_id=' +
+        encodeURIComponent(cmUserId) +
+        '&date=' +
+        encodeURIComponent(dateStr) +
+        '&client_tz_offset_minutes=' +
+        encodeURIComponent(String(clientTzOffsetMinutes()))
+    );
+    var data = await res.json().catch(function () {
+      return {};
+    });
+    if (!res.ok) return { ok: false, detail: data.detail || 'Failed' };
+    var revOk =
+      data.revisions_approved != null
+        ? !!data.revisions_approved
+        : !!data.allocation_approved || !!data.generator_schedule_approved;
+    return {
+      ok: true,
+      exists: !!data.exists,
+      consumer_name: data.consumer_name || '',
+      energy_manager_name: data.energy_manager_name || '',
+      allocation_approved: !!data.allocation_approved,
+      generator_schedule_approved: !!data.generator_schedule_approved,
+      revisions_approved: revOk,
+      slots: data.slots || [],
+      allocation_revision_summary: data.allocation_revision_summary || [],
+      editableSlotRange: data.editable_slot_range || null,
+      generator_upload_revisions: data.generator_upload_revisions || [],
+    };
+  }
+
+  function renderRevisionModalRows(rows, revisionKey, revisionTitle, highlightChanges) {
+    var showAllocCol = revisionKey === '__supply__' && !highlightChanges;
+    var theadRow = document.getElementById('revisionSlotsTheadRow');
+    if (theadRow) {
+      if (showAllocCol) {
+        theadRow.innerHTML =
+          '<th style="width:72px">Slot</th>' +
+          '<th style="width:180px">Time block</th>' +
+          '<th style="width:140px">Supply (MWh)</th>' +
+          '<th style="width:160px">Allocation revision</th>';
+      } else {
+        theadRow.innerHTML =
+          '<th style="width:72px">Slot</th>' +
+          '<th style="width:180px">Time block</th>' +
+          '<th style="width:140px">Supply (MWh)</th>';
+      }
+    }
+
+    revisionSlotsTbody.innerHTML = '';
+    var total = 0;
+
+    if (!rows.length) {
+      var trEmpty = document.createElement('tr');
+      var cs = showAllocCol ? '4' : '3';
+      trEmpty.innerHTML =
+        '<td colspan="' +
+        cs +
+        '" class="text-muted py-4 text-center">No slots match this revision filter (allocation markers may differ per slot).</td>';
+      revisionSlotsTbody.appendChild(trEmpty);
+    } else {
+      rows.forEach(function (r) {
+        total += num(r.supply_mwh);
+        var revLab =
+          r.allocation_revision != null && r.allocation_revision !== ''
+            ? revisionLabelFromKey(r.allocation_revision)
+            : '—';
+        var allocCell = showAllocCol ? '<td class="small">' + escapeHtml(revLab) + '</td>' : '';
+        var si = parseInt(r.slot_index, 10);
+        var hi = highlightChanges && (highlightChanges[si] || highlightChanges[String(si)]);
+        var supplyClass = hi ? ' kai-rev-supply-changed' : '';
+        var tip = hi
+          ? ' title="' +
+            escapeHtml(
+              fmt(hi.prev) +
+                ' MWh → ' +
+                fmt(hi.next) +
+                ' MWh (' +
+                (revisionTitle || 'revision') +
+                ')'
+            ) +
+            '"'
+          : '';
+        var tr = document.createElement('tr');
+        tr.innerHTML =
+          '<td><span class="badge bg-primary-subtle text-primary">' + escapeHtml(String(r.slot_index)) + '</span></td>' +
+          '<td>' + escapeHtml(r.time_block || r.slot_time || '') + '</td>' +
+          '<td class="' +
+          supplyClass.trim() +
+          '"' +
+          tip +
+          '>' +
+          fmt(r.supply_mwh) +
+          '</td>' +
+          allocCell;
+        revisionSlotsTbody.appendChild(tr);
+      });
+    }
+
+    if (revScheduledTotalEl) revScheduledTotalEl.textContent = fmt(total);
+
+    var filt = document.getElementById('revModalFilteredHint');
+    if (filt) {
+      filt.classList.remove('d-none');
+      var extraHi = '';
+      if (highlightChanges && typeof highlightChanges === 'object') {
+        var nch = Object.keys(highlightChanges).length;
+        if (nch)
+          extraHi =
+            ' Green cells: ' +
+            nch +
+            ' slot(s) changed — compare values for ' +
+            (revisionTitle || 'this revision') +
+            '.';
+      }
+      filt.textContent =
+        rows.length +
+        ' slot' +
+        (rows.length === 1 ? '' : 's') +
+        (revisionTitle ? ' — ' + revisionTitle : '') +
+        extraHi;
+    }
+
+    var sumLine = document.getElementById('revModalSummaryExtra');
+    if (sumLine) {
+      sumLine.classList.add('d-none');
+      sumLine.textContent = '';
+    }
+  }
+
+  async function openRevisionView(cmUserId, dateStr, revisionKey, revisionTitle) {
+    setStatus('Loading revision details...');
+    try {
+      var day = await loadSupplyDay(cmUserId, dateStr);
+      if (!day.ok) throw new Error(day.detail || 'Failed to load schedule.');
+      var baseSlots = day.slots || [];
+      var filtered = slotsForRevisionFilter(baseSlots, revisionKey);
+      revisionModalTitle.textContent =
+        (revisionTitle || revisionLabelFromKey(revisionKey)) +
+        ' — ' +
+        fmtDayLabel(dateStr) +
+        ' (' +
+        dateStr +
+        ')';
+      renderRevisionModalRows(filtered, revisionKey, revisionTitle || revisionLabelFromKey(revisionKey), null);
+      var modal = new bootstrap.Modal(revisionDetailModalEl);
+      modal.show();
+      setStatus('');
+    } catch (err) {
+      setStatus((err && err.message) || 'Failed to load revision details.');
+    }
+  }
+
+  async function openUploadRevisionView(cmUserId, dateStr, revisionNo) {
+    setStatus('Loading revision details...');
+    try {
+      var ur = (lastSupplyCache.uploadRevisions || []).find(function (x) {
+        return x.revision_number === revisionNo;
+      });
+      if (!ur) {
+        setStatus('Could not find this revision. Click Refresh and try again.', 'warning');
+        return;
+      }
+      var day = await loadSupplyDay(cmUserId, dateStr);
+      if (!day.ok) throw new Error(day.detail || 'Failed to load schedule.');
+      var highlight = {};
+      (ur.changed_slots || []).forEach(function (c) {
+        highlight[c.slot_index] = { prev: c.previous_mwh, next: c.new_mwh };
+      });
+      revisionModalTitle.textContent =
+        (ur.label || 'Revision ' + ur.revision_number) +
+        ' — ' +
+        fmtDayLabel(dateStr) +
+        ' (' +
+        dateStr +
+        ')';
+      renderRevisionModalRows(day.slots || [], '__supply__', ur.label || 'Supply revision', highlight);
+      var modal = new bootstrap.Modal(revisionDetailModalEl);
+      modal.show();
+      setStatus('');
+    } catch (err) {
+      setStatus((err && err.message) || 'Failed to load revision details.');
+    }
+  }
+
+  function bindRevisionRowActions(effectiveCmUserId, dateStr) {
+    daysTbody.querySelectorAll('.btnViewRevision').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var rk = btn.getAttribute('data-revision-key') || '__supply__';
+        var raw = btn.getAttribute('data-revision-label') || '';
+        var rl = '';
+        try {
+          rl = raw ? decodeURIComponent(raw) : '';
+        } catch (e) {
+          rl = raw;
+        }
+        openRevisionView(effectiveCmUserId, dateStr, rk, rl);
+      });
+    });
+    daysTbody.querySelectorAll('.btnViewUploadRevision').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var no = parseInt(btn.getAttribute('data-upload-revision-no'), 10);
+        if (Number.isNaN(no)) return;
+        openUploadRevisionView(effectiveCmUserId, dateStr, no);
+      });
+    });
+    daysTbody.querySelectorAll('.btnDownloadRevisionExcel').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var slots = lastSupplyCache.slots || [];
+        if (!slots.length || lastSupplyCache.cmUserId !== String(effectiveCmUserId) || lastSupplyCache.dateStr !== dateStr) {
+          setStatus('Reload data first (use Refresh).', 'warning');
+          return;
+        }
+        var raw = btn.getAttribute('data-revision-label') || '';
+        var rl = 'schedule';
+        try {
+          rl = raw ? decodeURIComponent(raw) : 'schedule';
+        } catch (e) {
+          rl = raw || 'schedule';
+        }
+        downloadSupplyExcelForDay(slots, dateStr, rl);
+      });
+    });
+    daysTbody.querySelectorAll('.btnUploadRevisionExcel').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        pendingRevisionUpload = { cmUserId: effectiveCmUserId, dateStr: dateStr };
+        if (revisionExcelFileInput) {
+          revisionExcelFileInput.value = '';
+          revisionExcelFileInput.click();
+        }
+      });
+    });
+  }
+
+  async function loadApprovedRevisionsForConsumer(cmUserId) {
+    var effectiveCmUserId = cmUserId || cmUserIdParam || currentCmUserId;
+    if (!effectiveCmUserId) {
+      setStatus('Select an energy manager first.');
+      return;
+    }
+    currentCmUserId = effectiveCmUserId;
+    setStatus('Fetching approved schedule from API...');
+    daysTbody.innerHTML =
+      '<tr><td colspan="3" class="text-muted py-4 text-center">Loading schedule…</td></tr>';
+
+    var st = await loadSupplyDay(effectiveCmUserId, selectedRevisionDate);
+    if (!st.ok) {
+      daysTbody.innerHTML =
+        '<tr><td colspan="3" class="text-danger py-4 text-center">Failed to load status. ' + escapeHtml(st.detail || '') + '</td></tr>';
+      setStatus(st.detail || 'Failed to load day status.');
+      return;
+    }
+
+    if (st.energy_manager_name && selectedConsumerNameEl) {
+      selectedConsumerNameEl.textContent = st.energy_manager_name;
+    }
+
+    if (!st.exists) {
+      daysTbody.innerHTML =
+        '<tr><td colspan="3" class="text-muted py-4 text-center">Not yet scheduled.</td></tr>';
+      setStatus('No supply schedule for this day yet.');
+      return;
+    }
+
+    if (!st.revisions_approved) {
+      daysTbody.innerHTML =
+        '<tr class="kai-rev-row-pending"><td colspan="3" class="py-4 text-center">' +
+        '<span class="text-warning fw-semibold">Waiting for Consumer Manager approval</span><br>' +
+        '<small class="text-muted d-inline-block mt-1" style="max-width: 28rem">The generator supply is submitted. It will appear here ' +
+        'after the energy manager approves the generator schedule (or full day allocation).</small></td></tr>';
+      setStatus('Supply submitted — waiting for Consumer Manager to approve the generator schedule.', 'warning');
+      return;
+    }
+
+    lastSupplyCache = {
+      cmUserId: String(effectiveCmUserId),
+      dateStr: selectedRevisionDate,
+      slots: st.slots || [],
+      summary: st.allocation_revision_summary || [],
+      editableSlotRange: st.editableSlotRange || null,
+      uploadRevisions: st.generator_upload_revisions || [],
+    };
+
+    var head = document.createElement('tr');
+    head.className = 'kai-rev-row-approved';
+    head.innerHTML =
+      '<td colspan="3" class="py-3 small text-success">' +
+      '<i class="fas fa-check-circle me-1"></i> <strong>Approved</strong> — ' +
+      editableRangeHint(selectedRevisionDate) +
+      ' Excel lists only editable slots (server time). After CM approval, uploads may change those slots only; locked values are checked on save.</td>';
+    daysTbody.appendChild(head);
+
+    var summary = st.allocation_revision_summary || [];
+    var dateStr = selectedRevisionDate;
+
+    function actionCell(rk, rl) {
+      var enc = encodeURIComponent(rl || '');
+      return (
+        '<div class="d-flex flex-wrap justify-content-end gap-1">' +
+        '<button class="btn btn-sm btn-outline-primary btnViewRevision" type="button" data-date="' +
+        escapeHtml(dateStr) +
+        '" data-revision-key="' +
+        escapeHtml(rk) +
+        '" data-revision-label="' +
+        enc +
+        '"><span class="btn-label"><i class="fas fa-eye"></i></span> View</button>' +
+        '<button class="btn btn-sm btn-outline-success btnDownloadRevisionExcel" type="button" data-revision-label="' +
+        enc +
+        '"><span class="btn-label"><i class="fas fa-download"></i></span> Excel</button>' +
+        '<button class="btn btn-sm btn-outline-secondary btnUploadRevisionExcel" type="button"><span class="btn-label"><i class="fas fa-upload"></i></span> Upload</button>' +
+        '</div>'
+      );
+    }
+
+    function actionCellUpload(revNo) {
+      var enc = encodeURIComponent('upload_revision_' + revNo);
+      return (
+        '<div class="d-flex flex-wrap justify-content-end gap-1">' +
+        '<button class="btn btn-sm btn-outline-primary btnViewUploadRevision" type="button" data-upload-revision-no="' +
+        revNo +
+        '"><span class="btn-label"><i class="fas fa-eye"></i></span> View</button>' +
+        '<button class="btn btn-sm btn-outline-success btnDownloadRevisionExcel" type="button" data-revision-label="' +
+        enc +
+        '"><span class="btn-label"><i class="fas fa-download"></i></span> Excel</button>' +
+        '<button class="btn btn-sm btn-outline-secondary btnUploadRevisionExcel" type="button"><span class="btn-label"><i class="fas fa-upload"></i></span> Upload</button>' +
+        '</div>'
+      );
+    }
+
+    function formatCmRemain(sec) {
+      var s = parseInt(sec, 10) || 0;
+      if (s <= 0) return '0s';
+      var m = Math.floor(s / 60);
+      var r = s % 60;
+      if (m >= 60) {
+        var h = Math.floor(m / 60);
+        m = m % 60;
+        return h + 'h ' + m + 'm';
+      }
+      if (m > 0) return m + 'm ' + r + 's';
+      return r + 's';
+    }
+
+    function appendGeneratorUploadRows() {
+      var uploads = st.generator_upload_revisions || [];
+      uploads.forEach(function (ur) {
+        var tr = document.createElement('tr');
+        var cnt = (ur.changed_slots && ur.changed_slots.length) || 0;
+        var revName = ur.label || 'Revision ' + ur.revision_number;
+        var sub = cnt > 0 ? cnt + ' slot' + (cnt === 1 ? '' : 's') + ' updated.' : '';
+        var subLine = sub ? '<br><small class="text-muted">' + escapeHtml(sub) + '</small>' : '';
+        var cmPending =
+          ur.cm_review_status === 'pending'
+            ? '<br><small><span class="badge bg-warning text-dark">Awaiting Consumer Manager</span> · auto ' +
+              escapeHtml(formatCmRemain(ur.seconds_remaining)) +
+              '</small>'
+            : '';
+        tr.innerHTML =
+          '<td><span class="fw-semibold">' +
+          escapeHtml(fmtDayLabel(dateStr)) +
+          '</span><br><small class="text-muted">' +
+          escapeHtml(dateStr) +
+          '</small></td>' +
+          '<td><span class="fw-semibold">' +
+          escapeHtml(revName) +
+          '</span>' +
+          subLine +
+          cmPending +
+          '</td>' +
+          '<td class="text-end">' +
+          actionCellUpload(ur.revision_number) +
+          '</td>';
+        daysTbody.appendChild(tr);
+      });
+    }
+
+    if (!summary.length) {
+      var tr0 = document.createElement('tr');
+      tr0.innerHTML =
+        '<td><span class="fw-semibold">' +
+        escapeHtml(fmtDayLabel(dateStr)) +
+        '</span><br><small class="text-muted">' +
+        escapeHtml(dateStr) +
+        '</small></td>' +
+        '<td><span class="fw-semibold text-muted">Approved generator supply</span><br>' +
+        '<small class="text-muted">No separate revision markers in allocation data yet.</small></td>' +
+        '<td class="text-end">' +
+        actionCell('__supply__', 'approved_supply') +
+        '</td>';
+      daysTbody.appendChild(tr0);
+      appendGeneratorUploadRows();
+      bindRevisionRowActions(effectiveCmUserId, dateStr);
+      setStatus('Schedule loaded — no allocation revision breakdown for this day.', 'success');
+      return;
+    }
+
+    summary.forEach(function (rev) {
+      var tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td><span class="fw-semibold">' +
+        escapeHtml(fmtDayLabel(dateStr)) +
+        '</span><br><small class="text-muted">' +
+        escapeHtml(dateStr) +
+        '</small></td>' +
+        '<td><span class="fw-semibold">' +
+        escapeHtml(rev.label || revisionLabelFromKey(rev.key)) +
+        '</span></td>' +
+        '<td class="text-end">' +
+        actionCell(rev.key, rev.label || revisionLabelFromKey(rev.key)) +
+        '</td>';
+      daysTbody.appendChild(tr);
+    });
+
+    appendGeneratorUploadRows();
+    bindRevisionRowActions(effectiveCmUserId, dateStr);
+    setStatus('Revision list loaded from allocation records.', 'success');
+  }
+
+  function showDayListForConsumer(cmUserId) {
+    currentCmUserId = cmUserId;
+    if (consumerListSection) consumerListSection.classList.add('d-none');
+    if (dayListSection) dayListSection.classList.remove('d-none');
+    if (schedulePageIntro) schedulePageIntro.classList.add('d-none');
+    if (energyManagersHeading) energyManagersHeading.classList.add('d-none');
+    if (backToConsumersBtn) {
+      backToConsumersBtn.onclick = function () {
+        window.location.href = '/generator-schedule-revisions/?date=' + encodeURIComponent(selectedRevisionDate);
+      };
+    }
+    loadApprovedRevisionsForConsumer(cmUserId);
+  }
+
+  function setConsumerEmptyVisible(show) {
+    if (consumersTableWrap) consumersTableWrap.classList.toggle('d-none', show);
+    if (consumerEmptyState) consumerEmptyState.classList.toggle('d-none', !show);
+  }
+
+  async function loadConsumerManagers() {
+    var dateStr = selectedRevisionDate;
+    if (!dateStr) return;
+    setStatus('Loading consumer managers...');
+    var res = await fetchWithAuth('/api/generator/consumer-managers/?date=' + encodeURIComponent(dateStr));
+    var data = await res.json().catch(function () { return {}; });
+    if (!res.ok) {
+      consumersTableBody.innerHTML =
+        '<tr><td colspan="2" class="text-danger py-4">Failed to load. ' + escapeHtml(data.detail || '') + '</td></tr>';
+      setConsumerEmptyVisible(false);
+      setStatus(data.detail || 'Failed to load');
+      return;
+    }
+
+    var items = data.results || [];
+
+    if (items.length === 0) {
+      consumersTableBody.innerHTML = '';
+      setConsumerEmptyVisible(true);
+      setStatus('');
+      return;
+    }
+
+    setConsumerEmptyVisible(false);
+    consumersTableBody.innerHTML = items
+      .map(function (c, idx) {
+        var em = c.energy_manager_name || c.consumer_name || '';
+        var ini = initials(em);
+        var avClass = idx % 2 === 1 ? 'kai-sched-avatar alt' : 'kai-sched-avatar bg-primary';
+        return (
+          '<tr>' +
+          '<td>' +
+          '<div class="d-flex align-items-center">' +
+          '<div class="' +
+          avClass +
+          '">' +
+          escapeHtml(ini) +
+          '</div>' +
+          '<div class="ms-3 min-w-0">' +
+          '<div class="fw-bold text-dark text-truncate" style="max-width: 320px">' +
+          escapeHtml(em) +
+          '</div>' +
+          '<small class="text-muted">Approved schedule revisions</small>' +
+          '</div>' +
+          '</div>' +
+          '</td>' +
+          '<td class="text-end">' +
+          '<button class="btn btn-primary btn-sm btnOpenDays" type="button" data-cm-user-id="' +
+          c.consumer_manager_user_id +
+          '" data-energy-manager-name="' +
+          encodeURIComponent(em) +
+          '">' +
+          '<span class="btn-label"><i class="fas fa-history"></i></span> Open revisions' +
+          '</button>' +
+          '</td>' +
+          '</tr>'
+        );
+      })
+      .join('');
+
+    consumersTableBody.querySelectorAll('.btnOpenDays').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var cmUserId = btn.getAttribute('data-cm-user-id');
+        var raw = btn.getAttribute('data-energy-manager-name');
+        var emName = raw ? decodeURIComponent(raw) : '';
+        if (selectedConsumerNameEl) selectedConsumerNameEl.textContent = emName;
+        window.location.href =
+          '/generator-schedule-revisions/?date=' + encodeURIComponent(selectedRevisionDate) + '&cm_user_id=' + encodeURIComponent(cmUserId);
+      });
+    });
+
+    setStatus('');
+  }
+
+  if (revisionExcelFileInput) {
+    revisionExcelFileInput.addEventListener('change', function () {
+      var f = revisionExcelFileInput.files && revisionExcelFileInput.files[0];
+      if (!f || !pendingRevisionUpload) return;
+      parseExcelAndPostSupply(pendingRevisionUpload.cmUserId, pendingRevisionUpload.dateStr, f);
+      pendingRevisionUpload = null;
+      revisionExcelFileInput.value = '';
+    });
+  }
+
+  var addRevisionBtn = document.getElementById('addRevisionBtn');
+  var addRevisionModalEl = document.getElementById('addRevisionModal');
+  var addRevisionManualBtn = document.getElementById('addRevisionManualBtn');
+  var addRevisionExcelBtn = document.getElementById('addRevisionExcelBtn');
+
+  function runAddRevisionExcelFlow(cm) {
+    var result = downloadSupplyExcelForDay(lastSupplyCache.slots, selectedRevisionDate, 'add_revision', {
+      silentSuccess: true,
+    });
+    if (!result.ok) return;
+    setStatus(
+      'Downloaded ' +
+        result.included +
+        ' row(s). Edit Supply (MWh), save the file, then pick it in the dialog to upload. ' +
+        editableRangeHint(selectedRevisionDate),
+      'success'
+    );
+    pendingRevisionUpload = { cmUserId: cm, dateStr: selectedRevisionDate };
+    if (revisionExcelFileInput) {
+      revisionExcelFileInput.value = '';
+      revisionExcelFileInput.click();
+    }
+  }
+
+  function validateAddRevisionContext(cm) {
+    if (!cm) {
+      setStatus('Open an energy manager first.', 'warning');
+      return false;
+    }
+    if (
+      !lastSupplyCache.slots.length ||
+      lastSupplyCache.cmUserId !== String(cm) ||
+      lastSupplyCache.dateStr !== selectedRevisionDate
+    ) {
+      setStatus('Wait for the schedule to finish loading, or click Refresh.', 'warning');
+      return false;
+    }
+    return true;
+  }
+
+  if (addRevisionBtn && addRevisionModalEl) {
+    addRevisionBtn.addEventListener('click', function () {
+      var cm = currentCmUserId || cmUserIdParam;
+      if (!validateAddRevisionContext(cm)) return;
+      var modal = new bootstrap.Modal(addRevisionModalEl);
+      modal.show();
+    });
+  }
+
+  if (addRevisionManualBtn && addRevisionModalEl) {
+    addRevisionManualBtn.addEventListener('click', function () {
+      var cm = currentCmUserId || cmUserIdParam;
+      if (!cm) return;
+      var inst = bootstrap.Modal.getInstance(addRevisionModalEl);
+      if (inst) inst.hide();
+      window.location.href =
+        '/generator-allocation/edit/' +
+        encodeURIComponent(cm) +
+        '/' +
+        encodeURIComponent(selectedRevisionDate) +
+        '/';
+    });
+  }
+
+  if (addRevisionExcelBtn && addRevisionModalEl) {
+    addRevisionExcelBtn.addEventListener('click', function () {
+      var cm = currentCmUserId || cmUserIdParam;
+      if (!cm || !validateAddRevisionContext(cm)) return;
+      var inst = bootstrap.Modal.getInstance(addRevisionModalEl);
+      if (inst) inst.hide();
+      runAddRevisionExcelFlow(cm);
+    });
+  }
+
+  loadConsumerManagers();
+
+  if (fetchRevisionsBtn) {
+    fetchRevisionsBtn.addEventListener('click', function () {
+      loadApprovedRevisionsForConsumer(currentCmUserId);
+    });
+  }
+
+  if (exportRevisionsTableBtn) {
+    exportRevisionsTableBtn.addEventListener('click', function () {
+      var cm = currentCmUserId || 'selected';
+      exportTableToExcel('daysTable', 'generator_revisions_' + cm + '_' + selectedRevisionDate + '.xlsx');
+    });
+  }
+
+  if (exportRevisionDetailBtn) {
+    exportRevisionDetailBtn.addEventListener('click', function () {
+      exportTableToExcel('revisionSlotsTable', 'generator_revision_detail_' + selectedRevisionDate + '.xlsx');
+    });
+  }
+
+  if (cmUserIdParam) {
+    showDayListForConsumer(cmUserIdParam);
+  }
+})();
+</script>
+{% endblock %}

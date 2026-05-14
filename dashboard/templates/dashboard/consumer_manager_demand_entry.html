@@ -1,0 +1,527 @@
+{% extends "dashboard/consumer_manager_base_kaiadmin.html" %}
+{% load static %}
+
+{% block title %}Demand Entry — ViewMetric{% endblock %}
+
+{% block extra_head %}
+<style>
+  .shutdownRow { background: rgba(254, 243, 199, 0.45) !important; }
+  .shutdownText { color: #b45309; }
+  .kai-edit-slots-wrap {
+    max-height: min(65vh, 560px);
+    overflow: auto;
+    border-radius: 12px;
+    border: 1px solid rgba(21, 114, 232, 0.18);
+    box-shadow: 0 6px 24px rgba(21, 114, 232, 0.1);
+    background: #fff;
+  }
+  .kai-edit-slots-wrap.kai-de-overall {
+    max-height: min(55vh, 480px);
+  }
+  .kai-edit-slots-table {
+    margin-bottom: 0;
+    --bs-table-striped-bg: rgba(21, 114, 232, 0.055);
+    --bs-table-hover-bg: rgba(21, 114, 232, 0.12);
+    border-color: transparent;
+  }
+  .kai-edit-slots-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: #fff !important;
+    border: none !important;
+    padding-top: 0.85rem !important;
+    padding-bottom: 0.85rem !important;
+    background: linear-gradient(135deg, #1572e8 0%, #1269db 48%, #0d5bbd 100%) !important;
+    box-shadow: 0 3px 10px rgba(21, 114, 232, 0.35);
+  }
+  .kai-edit-slots-table tbody td {
+    vertical-align: middle;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+    border-color: rgba(21, 114, 232, 0.1);
+  }
+  .kai-slot-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 0.75rem;
+    line-height: 1;
+    color: #fff;
+    background: linear-gradient(135deg, #6861ce 0%, #4c4b9e 100%);
+    box-shadow: 0 2px 8px rgba(104, 97, 206, 0.35);
+  }
+  .kai-slot-pill.alt {
+    background: linear-gradient(135deg, #1572e8 0%, #0d5bbd 100%);
+    box-shadow: 0 2px 8px rgba(21, 114, 232, 0.3);
+  }
+  .kai-time-label {
+    color: #1269db;
+    font-weight: 600;
+  }
+  .cm-de-metric {
+    display: inline-block;
+    min-width: 3.5rem;
+    padding: 0.3rem 0.6rem;
+    border: 1px solid rgba(108, 117, 125, 0.28);
+    background: rgba(108, 117, 125, 0.14);
+    border-radius: 8px;
+    font-weight: 600;
+    color: #495057;
+    text-align: right;
+    font-size: 0.875rem;
+  }
+  .cm-de-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1050;
+    padding: 1rem;
+  }
+  .cm-de-modal-overlay.hidden {
+    display: none !important;
+  }
+  .cm-de-modal-content {
+    background: #fff;
+    padding: 1.5rem;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+    max-width: min(96vw, 1100px);
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+    border: 1px solid rgba(21, 114, 232, 0.12);
+  }
+  .kai-edit-slots-modal-wrap {
+    max-height: min(50vh, 380px);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+            <div class="mb-3 pt-2">
+              <div class="page-pretitle">Demand</div>
+              <h3 class="fw-bold mb-1">Plant Demand Filled (Consumer View)</h3>
+              <p class="text-muted small mb-0" style="max-width: 40rem">
+                Per-plant and aggregate demand for the rolling week ahead (from tomorrow).
+              </p>
+            </div>
+
+            <div class="row">
+              <div class="col-12">
+                <div class="card card-round">
+                  <div class="card-header">
+                    <div class="card-head-row">
+                      <div class="card-title">Plants</div>
+                      <div class="card-tools d-flex flex-wrap align-items-center gap-2">
+                        <label class="small text-muted mb-0 fw-semibold text-uppercase" for="dateSelect" style="letter-spacing: 0.06em">Day</label>
+                        <select id="dateSelect" class="form-select form-select-sm" style="min-width: 14rem" aria-label="Select day"></select>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="card-body">
+                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                      <span class="text-muted small fw-semibold text-uppercase" style="letter-spacing: 0.06em">By plant</span>
+                      <small class="text-muted">Filled demand and schedule status.</small>
+                    </div>
+                    <div class="kai-edit-slots-wrap table-responsive">
+                      <table class="table table-striped table-hover align-middle kai-edit-slots-table mb-0" id="plantsDemandTable">
+                        <thead>
+                          <tr>
+                            <th>Plant</th>
+                            <th style="min-width: 140px">Filled Demand (MWh)</th>
+                            <th style="width: 140px">Status</th>
+                            <th class="text-end" style="min-width: 100px">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody></tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="row mt-4">
+              <div class="col-12 col-lg-5">
+                <div class="card card-stats card-round">
+                  <div class="card-body">
+                    <div class="row align-items-center">
+                      <div class="col-icon">
+                        <div class="icon-big text-center icon-primary bubble-shadow-small"><i class="fas fa-bolt"></i></div>
+                      </div>
+                      <div class="col col-stats ms-3 ms-sm-0">
+                        <div class="numbers">
+                          <p class="card-category">All Plants Required Demand (Total)</p>
+                          <h4 class="card-title" id="totalDemand">0</h4>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="row mt-4">
+              <div class="col-12">
+                <div class="card card-round">
+                  <div class="card-header">
+                    <div class="card-head-row">
+                      <div class="card-title">Overall demand (96 slots)</div>
+                    </div>
+                  </div>
+                  <div class="card-body">
+                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                      <span class="text-muted small fw-semibold text-uppercase" style="letter-spacing: 0.06em">Aggregate</span>
+                      <small class="text-muted">Slot-wise totals across plants.</small>
+                    </div>
+                    <div class="kai-edit-slots-wrap table-responsive kai-de-overall">
+                      <table class="table table-striped table-hover align-middle kai-edit-slots-table mb-0" id="overallDemandTable">
+                        <thead>
+                          <tr>
+                            <th style="width: 72px">Sl. No.</th>
+                            <th style="min-width: 140px">Time slots</th>
+                            <th>No of plants</th>
+                            <th>Demand (with loss) MWh</th>
+                          </tr>
+                        </thead>
+                        <tbody id="overallDemandTbody"></tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="text-muted small mt-3" id="statusMsg" aria-live="polite"></div>
+
+            <div id="slotsModal" class="cm-de-modal-overlay hidden" role="dialog" aria-modal="true" onclick="if(event.target===this)closeSlotsModal()">
+              <div class="cm-de-modal-content" onclick="event.stopPropagation()">
+                <div class="d-flex align-items-start justify-content-between gap-3 mb-3">
+                  <div>
+                    <h5 class="fw-bold mb-1" id="slotsModalTitle">Plant wise demand</h5>
+                    <p class="text-muted small mb-0" id="slotsModalSubtitle">Demand per slot with transmission loss applied.</p>
+                  </div>
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="closeSlotsModal()">Close</button>
+                </div>
+                <div class="kai-edit-slots-wrap table-responsive kai-edit-slots-modal-wrap">
+                  <table class="table table-sm table-striped table-hover align-middle kai-edit-slots-table mb-0" id="slotsModalTable">
+                    <thead>
+                      <tr>
+                        <th>Slot</th>
+                        <th>Time Block</th>
+                        <th>Demand (without loss) MWh</th>
+                        <th>State TL (%)</th>
+                        <th>Central TL (%)</th>
+                        <th>Total TL (MWh)</th>
+                        <th>Demand (with loss) MWh</th>
+                      </tr>
+                    </thead>
+                    <tbody id="slotsModalTbody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+  var fetchWithAuth = window.kaiFetchWithAuth;
+  if (!fetchWithAuth) return;
+
+  function toDateStr(d) {
+    var yyyy = d.getFullYear();
+    var mm = String(d.getMonth() + 1).padStart(2, '0');
+    var dd = String(d.getDate()).padStart(2, '0');
+    return yyyy + '-' + mm + '-' + dd;
+  }
+
+  function buildAllowedDates() {
+    var base = new Date();
+    base.setHours(0, 0, 0, 0);
+    var tomorrow = new Date(base.getTime() + 24 * 60 * 60 * 1000);
+    var out = [];
+    for (var i = 0; i < 7; i++) {
+      var d = new Date(tomorrow.getTime() + i * 24 * 60 * 60 * 1000);
+      out.push({
+        dateStr: toDateStr(d),
+        label: i === 0 ? 'Tomorrow' : d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }),
+      });
+    }
+    return out;
+  }
+
+  function formatFloat(v) {
+    var n = Number(v);
+    if (Number.isNaN(n)) return '0';
+    return n.toFixed(2).replace(/\.?0+$/, '');
+  }
+
+  function escapeHtml(s) {
+    if (s == null || s === '') return '';
+    var d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  function escapeAttr(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  var dateSelect = document.getElementById('dateSelect');
+  var tableBody = document.getElementById('plantsDemandTable').querySelector('tbody');
+  var totalDemandEl = document.getElementById('totalDemand');
+  var statusMsg = document.getElementById('statusMsg');
+  var selectedDate = '';
+
+  function setStatus(msg, ok) {
+    if (ok === void 0) ok = true;
+    statusMsg.textContent = msg || '';
+    statusMsg.className = 'small mt-3 ' + (ok ? 'text-success' : 'text-danger');
+  }
+
+  var allowedDates = buildAllowedDates();
+  dateSelect.innerHTML = allowedDates
+    .map(function (d) {
+      return '<option value="' + d.dateStr + '">' + d.label + '</option>';
+    })
+    .join('');
+  selectedDate = allowedDates[0].dateStr;
+  dateSelect.value = selectedDate;
+
+  async function loadSummary(dateStr) {
+    setStatus('Loading…', true);
+    try {
+      var res = await fetchWithAuth('/api/consumer-demand-entry/?date=' + encodeURIComponent(dateStr));
+      var data = await res.json().catch(function () {
+        return {};
+      });
+      if (!res.ok) {
+        tableBody.innerHTML =
+          '<tr><td colspan="4" class="text-muted py-3">Failed to load data</td></tr>';
+        setStatus(data.detail || 'Failed to load', false);
+        return;
+      }
+
+      var plants = data.plants || [];
+      tableBody.innerHTML = '';
+
+      plants.forEach(function (p) {
+        var tr = document.createElement('tr');
+        if (p.shutdown) tr.classList.add('shutdownRow');
+
+        var badge =
+          !p.exists
+            ? '<span class="badge bg-secondary">Not Scheduled</span>'
+            : p.shutdown
+              ? '<span class="badge bg-warning text-dark">Shutdown</span>'
+              : '<span class="badge bg-success">Scheduled</span>';
+
+        var viewBtn =
+          p.exists && !p.shutdown
+            ? '<button type="button" class="btn btn-sm btn-primary btnView" data-plant-id="' +
+              p.plant_id +
+              '" data-plant-name="' +
+              escapeAttr(p.plant_name) +
+              '"><span class="btn-label"><i class="fas fa-eye"></i></span> View</button>'
+            : '<span class="text-muted">—</span>';
+
+        tr.innerHTML =
+          '<td><span class="fw-semibold text-dark">' +
+          escapeHtml(p.plant_name) +
+          '</span></td>' +
+          '<td><span class="cm-de-metric">' +
+          formatFloat(p.total_demand_mwh) +
+          '</span></td>' +
+          '<td class="' +
+          (p.shutdown ? 'shutdownText' : '') +
+          '">' +
+          badge +
+          '</td>' +
+          '<td class="text-end">' +
+          viewBtn +
+          '</td>';
+        tableBody.appendChild(tr);
+      });
+
+      tableBody.querySelectorAll('.btnView').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          openSlotsModal(btn.getAttribute('data-plant-id'), btn.getAttribute('data-plant-name'));
+        });
+      });
+
+      totalDemandEl.textContent = formatFloat(data.total_demand_mwh);
+      await loadOverallDemand(dateStr);
+      setStatus('Showing demand totals for selected day.', true);
+    } catch (e) {
+      tableBody.innerHTML = '<tr><td colspan="4" class="text-muted py-3">Failed to load data</td></tr>';
+      var overallTbody = document.getElementById('overallDemandTbody');
+      if (overallTbody) overallTbody.innerHTML = '<tr><td colspan="4" class="py-3">—</td></tr>';
+      setStatus(e.message || 'Failed to load', false);
+    }
+  }
+
+  dateSelect.addEventListener('change', async function () {
+    selectedDate = dateSelect.value;
+    await loadSummary(selectedDate);
+  });
+
+  async function loadOverallDemand(dateStr) {
+    var tbody = document.getElementById('overallDemandTbody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="4" class="py-3 text-muted">Loading…</td></tr>';
+    try {
+      var res = await fetchWithAuth('/api/consumer-demand-entry/overall-slots/?date=' + encodeURIComponent(dateStr));
+      var data = await res.json().catch(function () {
+        return {};
+      });
+      tbody.innerHTML = '';
+      if (!res.ok) {
+        tbody.innerHTML =
+          '<tr><td colspan="4" class="py-3 text-danger">' + (data.detail || 'Failed to load') + '</td></tr>';
+        return;
+      }
+      var slots = data.slots || [];
+      slots.forEach(function (s, i) {
+        var tr = document.createElement('tr');
+        var pillClass = i % 2 === 0 ? 'kai-slot-pill' : 'kai-slot-pill alt';
+        tr.innerHTML =
+          '<td><span class="' +
+          pillClass +
+          '">' +
+          (i + 1) +
+          '</span></td>' +
+          '<td><span class="kai-time-label">' +
+          escapeHtml(s.time_block || '—') +
+          '</span></td>' +
+          '<td><span class="cm-de-metric">' +
+          (s.no_of_plants ?? 0) +
+          '</span></td>' +
+          '<td><span class="cm-de-metric">' +
+          formatFloat(s.demand_with_loss_mwh) +
+          '</span></td>';
+        tbody.appendChild(tr);
+      });
+    } catch (e) {
+      tbody.innerHTML = '<tr><td colspan="4" class="py-3">Failed to load</td></tr>';
+    }
+  }
+
+  async function openSlotsModal(plantId, plantName) {
+    var modal = document.getElementById('slotsModal');
+    var tbody = document.getElementById('slotsModalTbody');
+    var titleEl = document.getElementById('slotsModalTitle');
+    var subtitleEl = document.getElementById('slotsModalSubtitle');
+    titleEl.textContent = plantName + ' – Plant wise demand';
+    tbody.innerHTML = '<tr><td colspan="7" class="py-3 text-muted">Loading…</td></tr>';
+    modal.classList.remove('hidden');
+    var res = await fetchWithAuth(
+      '/api/consumer-demand-entry/plant-slots/?date=' +
+        encodeURIComponent(selectedDate) +
+        '&plant_id=' +
+        encodeURIComponent(plantId)
+    );
+    var data = await res.json().catch(function () {
+      return {};
+    });
+    tbody.innerHTML = '';
+    if (!res.ok) {
+      tbody.innerHTML =
+        '<tr><td colspan="7" class="py-3 text-danger">' + (data.detail || 'Failed to load') + '</td></tr>';
+      return;
+    }
+    if (data.shutdown) {
+      tbody.innerHTML =
+        '<tr><td colspan="7" class="py-3 text-muted">Plant shutdown – no demand</td></tr>';
+      return;
+    }
+    var lossPct = data.transmission_loss_percent != null ? Number(data.transmission_loss_percent) : null;
+    subtitleEl.textContent =
+      lossPct != null
+        ? 'Demand per slot with transmission loss applied. Transmission loss: ' +
+          formatFloat(lossPct) +
+          '%. Formula: Demand (with loss) = Demand (without loss) + Total Transmission Loss.'
+        : 'Demand per slot with transmission loss applied.';
+    var statePct = data.state_transmission_loss_percent != null ? Number(data.state_transmission_loss_percent) : 0;
+    var centralPct = data.central_transmission_loss_percent != null ? Number(data.central_transmission_loss_percent) : 0;
+    var totalLossPct = statePct + centralPct;
+    var stateLoss = data.state_transmission_loss_percent != null ? formatFloat(data.state_transmission_loss_percent) : '—';
+    var centralLoss = data.central_transmission_loss_percent != null ? formatFloat(data.central_transmission_loss_percent) : '—';
+    (data.slots || []).forEach(function (s, idx) {
+      var netVal = Number(s.demand_mwh_without_loss) || 0;
+      var totalLossMwh = (netVal * totalLossPct) / 100;
+      var demandWithLoss = netVal + totalLossMwh;
+      var tr = document.createElement('tr');
+      var pillClass = idx % 2 === 0 ? 'kai-slot-pill' : 'kai-slot-pill alt';
+      tr.innerHTML =
+        '<td><span class="' +
+        pillClass +
+        '">' +
+        s.slot_index +
+        '</span></td>' +
+        '<td><span class="kai-time-label">' +
+        escapeHtml(s.time_block) +
+        '</span></td>' +
+        '<td><span class="cm-de-metric">' +
+        formatFloat(s.demand_mwh_without_loss) +
+        '</span></td>' +
+        '<td><span class="cm-de-metric">' +
+        stateLoss +
+        '</span></td>' +
+        '<td><span class="cm-de-metric">' +
+        centralLoss +
+        '</span></td>' +
+        '<td><span class="cm-de-metric">' +
+        formatFloat(totalLossMwh) +
+        '</span></td>' +
+        '<td><span class="cm-de-metric">' +
+        formatFloat(demandWithLoss) +
+        '</span></td>';
+      tbody.appendChild(tr);
+    });
+    if (data.total_demand_mwh != null) {
+      var totalNet = Number(data.total_demand_mwh_without_loss) || 0;
+      var totalLossSum = (totalNet * totalLossPct) / 100;
+      var totalWithLoss = totalNet + totalLossSum;
+      var tr = document.createElement('tr');
+      tr.className = 'table-secondary fw-bold';
+      tr.innerHTML =
+        '<td colspan="2">Total (96 slots)</td>' +
+        '<td><span class="cm-de-metric">' +
+        formatFloat(data.total_demand_mwh_without_loss) +
+        '</span></td>' +
+        '<td colspan="2"></td>' +
+        '<td><span class="cm-de-metric">' +
+        formatFloat(totalLossSum) +
+        '</span></td>' +
+        '<td><span class="cm-de-metric">' +
+        formatFloat(totalWithLoss) +
+        '</span></td>';
+      tbody.appendChild(tr);
+    }
+  }
+
+  window.closeSlotsModal = function () {
+    document.getElementById('slotsModal').classList.add('hidden');
+  };
+
+  loadSummary(selectedDate);
+})();
+</script>
+{% endblock %}

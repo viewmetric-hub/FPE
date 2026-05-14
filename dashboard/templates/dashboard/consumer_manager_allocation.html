@@ -1,0 +1,749 @@
+{% extends "dashboard/consumer_manager_base_kaiadmin.html" %}
+{% load static %}
+
+{% block title %}Generator Allocations — ViewMetric{% endblock %}
+
+{% block extra_head %}
+<style>
+  .kai-edit-slots-wrap {
+    max-height: min(62vh, 560px);
+    overflow: auto;
+    border-radius: 12px;
+    border: 1px solid rgba(21, 114, 232, 0.18);
+    box-shadow: 0 6px 24px rgba(21, 114, 232, 0.1);
+    background: #fff;
+  }
+  .kai-edit-slots-table {
+    margin-bottom: 0;
+    --bs-table-striped-bg: rgba(21, 114, 232, 0.055);
+    --bs-table-hover-bg: rgba(21, 114, 232, 0.12);
+    border-color: transparent;
+  }
+  .kai-edit-slots-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    font-size: 0.68rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: #fff !important;
+    border: none !important;
+    padding-top: 0.85rem !important;
+    padding-bottom: 0.85rem !important;
+    background: linear-gradient(135deg, #1572e8 0%, #1269db 48%, #0d5bbd 100%) !important;
+    box-shadow: 0 3px 10px rgba(21, 114, 232, 0.35);
+    white-space: nowrap;
+  }
+  .kai-edit-slots-table tbody td {
+    vertical-align: middle;
+    padding-top: 0.45rem;
+    padding-bottom: 0.45rem;
+    border-color: rgba(21, 114, 232, 0.1);
+    font-size: 0.875rem;
+  }
+  .kai-slot-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 0.75rem;
+    line-height: 1;
+    color: #fff;
+    background: linear-gradient(135deg, #6861ce 0%, #4c4b9e 100%);
+    box-shadow: 0 2px 8px rgba(104, 97, 206, 0.35);
+  }
+  .kai-slot-pill.alt {
+    background: linear-gradient(135deg, #1572e8 0%, #0d5bbd 100%);
+    box-shadow: 0 2px 8px rgba(21, 114, 232, 0.3);
+  }
+  .kai-time-label {
+    color: #1269db;
+    font-weight: 600;
+  }
+  .cm-alloc-metric {
+    display: inline-block;
+    min-width: 3.25rem;
+    padding: 0.28rem 0.55rem;
+    border: 1px solid rgba(108, 117, 125, 0.28);
+    background: rgba(108, 117, 125, 0.14);
+    border-radius: 8px;
+    font-weight: 600;
+    color: #495057;
+    text-align: right;
+    font-size: 0.8125rem;
+  }
+  .kai-stat-row .card-stats {
+    height: 100%;
+    min-height: 132px;
+  }
+  .kai-stat-row .card-stats .card-body {
+    min-height: 120px;
+    display: flex;
+    align-items: center;
+  }
+  .kai-stat-row .card-stats .numbers {
+    width: 100%;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+            <div class="mb-3 pt-2">
+              <div class="page-pretitle">Allocations</div>
+              <h3 class="fw-bold mb-1">Generator Allocations</h3>
+              <p class="text-muted small mb-0" style="max-width: 42rem">
+                Demand vs generator schedule by day. Base allocation uses 55% of scheduled supply per slot (45% unallocated).
+              </p>
+            </div>
+
+            <div class="card card-round">
+              <div class="card-header">
+                <div class="card-head-row">
+                  <div class="card-title">Planning day</div>
+                  <div class="card-tools">
+                    <label class="small text-muted mb-0 me-2 fw-semibold text-uppercase" for="dateSelect" style="letter-spacing: 0.06em">Select Day</label>
+                    <input type="date" id="dateSelect" class="form-control form-control-sm d-inline-block" style="min-width: 14rem" aria-label="Select day" />
+                  </div>
+                </div>
+              </div>
+              <div class="card-body pb-2">
+                <div class="row g-3 kai-stat-row">
+                  <div class="col-6 col-lg-3 d-flex">
+                    <div class="card card-stats card-round w-100">
+                      <div class="card-body">
+                        <div class="row align-items-center">
+                          <div class="col-icon">
+                            <div class="icon-big text-center icon-primary bubble-shadow-small"><i class="fas fa-chart-area"></i></div>
+                          </div>
+                          <div class="col col-stats ms-3 ms-sm-0">
+                            <div class="numbers">
+                              <p class="card-category">Total Demand (MWh)</p>
+                              <h4 class="card-title" id="totalDemand">0</h4>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-6 col-lg-3 d-flex">
+                    <div class="card card-stats card-round w-100">
+                      <div class="card-body">
+                        <div class="row align-items-center">
+                          <div class="col-icon">
+                            <div class="icon-big text-center icon-info bubble-shadow-small"><i class="fas fa-bolt"></i></div>
+                          </div>
+                          <div class="col col-stats ms-3 ms-sm-0">
+                            <div class="numbers">
+                              <p class="card-category">Generator Schedule (MWh)</p>
+                              <h4 class="card-title" id="totalAllocated">0</h4>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-6 col-lg-3 d-flex">
+                    <div class="card card-stats card-round w-100">
+                      <div class="card-body">
+                        <div class="row align-items-center">
+                          <div class="col-icon">
+                            <div class="icon-big text-center icon-success bubble-shadow-small"><i class="fas fa-percentage"></i></div>
+                          </div>
+                          <div class="col col-stats ms-3 ms-sm-0">
+                            <div class="numbers">
+                              <p class="card-category">Total base allocation (MWh)</p>
+                              <p class="text-muted mb-0" style="font-size: 0.7rem">Sum of 96 slots</p>
+                              <h4 class="card-title" id="totalBaseAllocation">0</h4>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-6 col-lg-3 d-flex">
+                    <div class="card card-stats card-round w-100">
+                      <div class="card-body">
+                        <div class="row align-items-center">
+                          <div class="col-icon">
+                            <div class="icon-big text-center icon-secondary bubble-shadow-small"><i class="fas fa-layer-group"></i></div>
+                          </div>
+                          <div class="col col-stats ms-3 ms-sm-0">
+                            <div class="numbers">
+                              <p class="card-category">Base allocation / plant (MWh)</p>
+                              <p class="text-muted mb-0" style="font-size: 0.7rem">Sum of 96 slots</p>
+                              <h4 class="card-title" id="totalBaseAllocationPerPlantSum">0</h4>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div id="pendingGenSupplyRevCard" class="card card-round mt-4 border-warning d-none">
+              <div class="card-header">
+                <div class="card-head-row">
+                  <div class="card-title">Pending generator supply revisions</div>
+                </div>
+              </div>
+              <div class="card-body pt-0" id="pendingGenSupplyRevBody">
+                <p class="text-muted small mb-0">No pending revisions for this day.</p>
+              </div>
+            </div>
+
+            <div class="card card-round mt-4">
+              <div class="card-header">
+                <div class="card-head-row">
+                  <div class="card-title">Slot-wise allocation (96 slots)</div>
+                </div>
+              </div>
+              <div class="card-body">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                  <span class="text-muted small fw-semibold text-uppercase" style="letter-spacing: 0.06em">Quarter-hour grid</span>
+                  <div class="d-flex flex-wrap align-items-center gap-2">
+                    <label class="small text-muted mb-0 fw-semibold text-uppercase" for="scheduleRevisionSelect" style="letter-spacing: 0.06em">Revision</label>
+                    <select id="scheduleRevisionSelect" class="form-select form-select-sm" style="min-width: 14rem" aria-label="Schedule revision view">
+                      <option value="submitted">Submitted schedule</option>
+                      <option value="revision1">Revision 1</option>
+                      <option value="revision2" selected>Latest revision</option>
+                    </select>
+                    <button type="button" id="exportSlotsBtn" class="btn btn-sm btn-outline-success">
+                      <span class="btn-label"><i class="fas fa-file-excel"></i></span>
+                      Export Excel
+                    </button>
+                    <small class="text-muted">All 96 slots for the selected day.</small>
+                  </div>
+                </div>
+                <div class="kai-edit-slots-wrap table-responsive">
+                  <table class="table table-striped table-hover align-middle kai-edit-slots-table mb-0" id="allocationSlotsTable" style="min-width: 1040px">
+                    <thead>
+                      <tr>
+                        <th style="width: 64px">Sl. No.</th>
+                        <th style="min-width: 130px">Time slot</th>
+                        <th>Overall demand (with loss) MWh</th>
+                        <th>Generator Submitted schedule MWh</th>
+                        <th>Final revised supplied MWh</th>
+                        <th>Base allocation (MWh)</th>
+                        <th style="width: 100px">No. of plants</th>
+                        <th>Base alloc. / plant (MWh)</th>
+                        <th>Unallocated (MWh)</th>
+                      </tr>
+                    </thead>
+                    <tbody id="allocationSlotsTbody"></tbody>
+                  </table>
+                </div>
+                <div class="text-muted small mt-3" id="statusMsg" aria-live="polite"></div>
+              </div>
+            </div>
+
+            <div class="modal fade" id="overrideGenUploadRevModal" tabindex="-1" aria-labelledby="overrideGenUploadRevModalLabel" aria-hidden="true">
+              <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title" id="overrideGenUploadRevModalLabel">Override slot values</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                  </div>
+                  <div class="modal-body">
+                    <p class="text-muted small">Adjust MWh for editable slots in this revision, then apply. Locked slots (near real time) cannot be changed here.</p>
+                    <div class="table-responsive">
+                      <table class="table table-sm align-middle" id="overrideGenUploadRevTable">
+                        <thead>
+                          <tr>
+                            <th>Slot</th>
+                            <th>Previous MWh</th>
+                            <th>Generator MWh</th>
+                            <th>Override MWh</th>
+                          </tr>
+                        </thead>
+                        <tbody id="overrideGenUploadRevTbody"></tbody>
+                      </table>
+                    </div>
+                  </div>
+                  <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="overrideGenUploadRevSubmit">Apply override</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<script>
+(function () {
+  var fetchWithAuth = window.kaiFetchWithAuth;
+  if (!fetchWithAuth) return;
+
+  function escapeHtml(s) {
+    if (s == null || s === '') return '';
+    var d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  function toDateStr(d) {
+    var yyyy = d.getFullYear();
+    var mm = String(d.getMonth() + 1).padStart(2, '0');
+    var dd = String(d.getDate()).padStart(2, '0');
+    return yyyy + '-' + mm + '-' + dd;
+  }
+
+  function todayDateStr() {
+    var d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return toDateStr(d);
+  }
+
+  function formatFloat(v) {
+    var n = Number(v);
+    if (Number.isNaN(n)) return '0';
+    return n.toFixed(2).replace(/\.?0+$/, '');
+  }
+
+  var dateSelect = document.getElementById('dateSelect');
+  var totalDemandEl = document.getElementById('totalDemand');
+  var totalAllocatedEl = document.getElementById('totalAllocated');
+  var totalBaseAllocationEl = document.getElementById('totalBaseAllocation');
+  var totalBaseAllocationPerPlantSumEl = document.getElementById('totalBaseAllocationPerPlantSum');
+  var scheduleRevisionSelect = document.getElementById('scheduleRevisionSelect');
+  var exportSlotsBtn = document.getElementById('exportSlotsBtn');
+  var statusMsg = document.getElementById('statusMsg');
+  var currentSlots = [];
+  var currentNumPlants = 0;
+  var pendingRevTimer = null;
+  var overrideModalRevisionId = null;
+
+  function clearPendingRevTimer() {
+    if (pendingRevTimer) {
+      clearInterval(pendingRevTimer);
+      pendingRevTimer = null;
+    }
+  }
+
+  function formatSecondsRemain(sec) {
+    var s = parseInt(sec, 10) || 0;
+    if (s <= 0) return '0s';
+    var m = Math.floor(s / 60);
+    var r = s % 60;
+    if (m >= 60) {
+      var h = Math.floor(m / 60);
+      m = m % 60;
+      return h + 'h ' + m + 'm';
+    }
+    if (m > 0) return m + 'm ' + r + 's';
+    return r + 's';
+  }
+
+  function renderPendingUploadRevisions(list) {
+    var card = document.getElementById('pendingGenSupplyRevCard');
+    var body = document.getElementById('pendingGenSupplyRevBody');
+    if (!card || !body) return;
+    if (!list || list.length === 0) {
+      clearPendingRevTimer();
+      card.classList.add('d-none');
+      body.innerHTML = '<p class="text-muted small mb-0">No pending revisions for this day.</p>';
+      return;
+    }
+    card.classList.remove('d-none');
+    var rows = list
+      .map(function (p) {
+        var cnt = (p.changed_slots && p.changed_slots.length) || 0;
+        var remain = formatSecondsRemain(p.seconds_remaining);
+        return (
+          '<tr data-revision-id="' +
+          escapeHtml(String(p.id)) +
+          '">' +
+          '<td><span class="fw-semibold">Revision ' +
+          escapeHtml(String(p.revision_number)) +
+          '</span><br><small class="text-muted">' +
+          cnt +
+          ' slot' +
+          (cnt === 1 ? '' : 's') +
+          ' changed</small></td>' +
+          '<td><span class="badge bg-warning text-dark">Awaiting approval</span><br><small class="text-muted">Auto-approve in ' +
+          escapeHtml(remain) +
+          '</small></td>' +
+          '<td class="text-end">' +
+          '<div class="btn-group btn-group-sm flex-wrap">' +
+          '<button type="button" class="btn btn-success btnApproveGenUploadRev" data-id="' +
+          escapeHtml(String(p.id)) +
+          '">Approve</button>' +
+          '<button type="button" class="btn btn-outline-danger btnRejectGenUploadRev" data-id="' +
+          escapeHtml(String(p.id)) +
+          '">Reject</button>' +
+          '<button type="button" class="btn btn-outline-primary btnOverrideGenUploadRev" data-id="' +
+          escapeHtml(String(p.id)) +
+          '">Override…</button>' +
+          '</div></td></tr>'
+        );
+      })
+      .join('');
+    body.innerHTML =
+      '<div class="table-responsive"><table class="table table-hover align-middle mb-0">' +
+      '<thead><tr><th>Revision</th><th>Status</th><th class="text-end">Actions</th></tr></thead><tbody>' +
+      rows +
+      '</tbody></table></div>';
+  }
+
+  function bindPendingRevisionButtons() {
+    document.querySelectorAll('.btnApproveGenUploadRev').forEach(function (btn) {
+      btn.onclick = function () {
+        var id = parseInt(btn.getAttribute('data-id'), 10);
+        resolveGeneratorUploadRevision(id, 'approve');
+      };
+    });
+    document.querySelectorAll('.btnRejectGenUploadRev').forEach(function (btn) {
+      btn.onclick = function () {
+        var id = parseInt(btn.getAttribute('data-id'), 10);
+        resolveGeneratorUploadRevision(id, 'reject');
+      };
+    });
+    document.querySelectorAll('.btnOverrideGenUploadRev').forEach(function (btn) {
+      btn.onclick = function () {
+        var id = parseInt(btn.getAttribute('data-id'), 10);
+        openOverrideGeneratorUploadModal(id);
+      };
+    });
+  }
+
+  async function resolveGeneratorUploadRevision(revisionId, action, slots) {
+    try {
+      var payload = {
+        revision_id: revisionId,
+        action: action,
+        client_tz_offset_minutes: new Date().getTimezoneOffset() * -1,
+      };
+      if (slots && slots.length) payload.slots = slots;
+      var res = await fetchWithAuth('/api/consumer-manager/generator-upload-revisions/resolve/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      var data = await res.json().catch(function () {
+        return {};
+      });
+      if (!res.ok) {
+        setStatus(data.detail || 'Action failed', false);
+        return;
+      }
+      setStatus(
+        action === 'approve'
+          ? 'Revision approved.'
+          : action === 'reject'
+            ? 'Revision rejected; generator schedule reverted for changed slots.'
+            : 'Override applied.',
+        true
+      );
+      loadData(dateSelect.value);
+    } catch (e) {
+      setStatus(e.message || 'Action failed', false);
+    }
+  }
+
+  function openOverrideGeneratorUploadModal(revisionId) {
+    overrideModalRevisionId = revisionId;
+    var tbody = document.getElementById('overrideGenUploadRevTbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    fetchWithAuth('/api/consumer-manager/generator-upload-revisions/pending/?date=' + encodeURIComponent(dateSelect.value))
+      .then(function (res) {
+        return res.json();
+      })
+      .then(function (data) {
+        var item = (data.pending || []).find(function (p) {
+          return parseInt(p.id, 10) === revisionId;
+        });
+        if (!item || !item.changed_slots) return;
+        item.changed_slots.forEach(function (cs) {
+          var tr = document.createElement('tr');
+          tr.innerHTML =
+            '<td>' +
+            escapeHtml(String(cs.slot_index)) +
+            '</td>' +
+            '<td>' +
+            formatFloat(cs.previous_mwh) +
+            '</td>' +
+            '<td>' +
+            formatFloat(cs.new_mwh) +
+            '</td>' +
+            '<td><input type="number" step="0.0001" min="0" class="form-control form-control-sm override-slot-input" data-slot-index="' +
+            escapeHtml(String(cs.slot_index)) +
+            '" value="' +
+            escapeHtml(String(cs.new_mwh)) +
+            '" /></td>';
+          tbody.appendChild(tr);
+        });
+        var modalEl = document.getElementById('overrideGenUploadRevModal');
+        if (modalEl && window.bootstrap && window.bootstrap.Modal) {
+          window.bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        }
+      })
+      .catch(function () {});
+  }
+
+  async function loadPendingUploadRevisions(dateStr) {
+    var card = document.getElementById('pendingGenSupplyRevCard');
+    var body = document.getElementById('pendingGenSupplyRevBody');
+    if (!card || !body) return;
+    clearPendingRevTimer();
+    try {
+      var res = await fetchWithAuth(
+        '/api/consumer-manager/generator-upload-revisions/pending/?date=' + encodeURIComponent(dateStr)
+      );
+      var data = await res.json().catch(function () {
+        return {};
+      });
+      if (!res.ok) {
+        card.classList.add('d-none');
+        body.innerHTML = '<p class="text-muted small mb-0">Could not load pending revisions.</p>';
+        return;
+      }
+      renderPendingUploadRevisions(data.pending || []);
+      bindPendingRevisionButtons();
+      if (data.pending && data.pending.length) {
+        pendingRevTimer = setInterval(function () {
+          loadPendingUploadRevisions(dateSelect.value);
+        }, 30000);
+      }
+    } catch (e) {
+      card.classList.add('d-none');
+    }
+  }
+
+  function exportTableToExcel(tableId, fileName) {
+    var table = document.getElementById(tableId);
+    if (!table) {
+      setStatus('Table not found for export.', false);
+      return;
+    }
+    if (!window.XLSX) {
+      setStatus('Excel export library not loaded.', false);
+      return;
+    }
+
+    var rows = [];
+    var headers = Array.from(table.querySelectorAll('thead th')).map(function (th) {
+      return (th.textContent || '').trim();
+    });
+    rows.push(headers);
+
+    Array.from(table.querySelectorAll('tbody tr')).forEach(function (tr) {
+      if (tr.classList.contains('d-none')) return;
+      var cells = Array.from(tr.querySelectorAll('td')).map(function (td) {
+        return (td.textContent || '').replace(/\s+/g, ' ').trim();
+      });
+      if (cells.length) rows.push(cells);
+    });
+
+    var ws = XLSX.utils.aoa_to_sheet(rows);
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Slots');
+    XLSX.writeFile(wb, fileName);
+  }
+
+  function applyRevisionStep(baseVal, slotIndex, revisionNo) {
+    var v = Number(baseVal) || 0;
+    var idx = parseInt(slotIndex, 10) || 0;
+    var pct = revisionNo === 1
+      ? ((idx % 9) - 4) / 100
+      : ((idx % 11) - 5) / 90;
+    var bias = revisionNo === 1
+      ? (((idx % 4) - 1.5) * 0.03)
+      : (((idx % 5) - 2) * 0.04 + 0.05);
+    var out = (v * (1 + pct)) + bias;
+    return Math.max(0, Number(out.toFixed(2)) || 0);
+  }
+
+  function submittedSlotSupplyMwh(s) {
+    if (s == null) return 0;
+    var sup = s.supply_mwh;
+    if (sup != null && sup !== '') return Number(sup) || 0;
+    return Number(s.allocated_mwh) || 0;
+  }
+
+  function slotSupplyMwh(s, revisionMode) {
+    var scheduled = submittedSlotSupplyMwh(s);
+    var mode = revisionMode || 'submitted';
+    var slotIndex = parseInt(s && s.slot_index, 10) || 0;
+    if (mode === 'revision1') return applyRevisionStep(scheduled, slotIndex, 1);
+    if (mode === 'revision2') return applyRevisionStep(applyRevisionStep(scheduled, slotIndex, 1), slotIndex, 2);
+    return scheduled;
+  }
+
+  function updateBaseAllocationSummaryCards(slots, numPlants, revisionMode) {
+    var list = slots || [];
+    var nPlants = numPlants != null && numPlants !== '' ? parseInt(String(numPlants), 10) : 0;
+    var sumBase = 0;
+    var sumBasePerPlant = 0;
+    list.forEach(function (s) {
+      var gen = slotSupplyMwh(s, revisionMode);
+      var baseAlloc = gen * 0.55;
+      sumBase += baseAlloc;
+      if (Number.isFinite(nPlants) && nPlants > 0) {
+        sumBasePerPlant += baseAlloc / nPlants;
+      }
+    });
+    if (totalBaseAllocationEl) totalBaseAllocationEl.textContent = formatFloat(sumBase);
+    if (totalBaseAllocationPerPlantSumEl) totalBaseAllocationPerPlantSumEl.textContent = formatFloat(sumBasePerPlant);
+  }
+
+  function resetSummaryCards() {
+    if (totalDemandEl) totalDemandEl.textContent = '0';
+    if (totalAllocatedEl) totalAllocatedEl.textContent = '0';
+    if (totalBaseAllocationEl) totalBaseAllocationEl.textContent = '0';
+    if (totalBaseAllocationPerPlantSumEl) totalBaseAllocationPerPlantSumEl.textContent = '0';
+  }
+
+  function setStatus(msg, ok) {
+    if (ok === void 0) ok = true;
+    statusMsg.textContent = msg || '';
+    statusMsg.className = 'small mt-3 ' + (ok ? 'text-success' : 'text-danger');
+  }
+
+  function renderAllocationSlotsTable(slots, numPlants, revisionMode) {
+    var tbody = document.getElementById('allocationSlotsTbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    var list = slots || [];
+    var nPlants = numPlants != null && numPlants !== '' ? parseInt(String(numPlants), 10) : 0;
+    var plantsCell = Number.isFinite(nPlants) ? String(nPlants) : '—';
+    if (list.length === 0) {
+      tbody.innerHTML =
+        '<tr><td colspan="9" class="text-muted py-3">No slot data</td></tr>';
+      return;
+    }
+    var sumGenerator = 0;
+    list.forEach(function (s, i) {
+      var submittedSchedule = submittedSlotSupplyMwh(s);
+      var genSchedule = slotSupplyMwh(s, revisionMode);
+      sumGenerator += genSchedule;
+      var baseAlloc = genSchedule * 0.55;
+      var unallocated = genSchedule * 0.45;
+      var basePerPlant = Number.isFinite(nPlants) && nPlants > 0 ? baseAlloc / nPlants : null;
+      var basePerPlantCell = basePerPlant != null ? formatFloat(basePerPlant) : '—';
+      var pillClass = i % 2 === 0 ? 'kai-slot-pill' : 'kai-slot-pill alt';
+      var timeLabel = s.time_block || s.slot_time || '—';
+      var tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td><span class="' +
+        pillClass +
+        '">' +
+        (i + 1) +
+        '</span></td>' +
+        '<td><span class="kai-time-label">' +
+        escapeHtml(timeLabel) +
+        '</span></td>' +
+        '<td><span class="cm-alloc-metric">' +
+        formatFloat(s.demand_mwh) +
+        '</span></td>' +
+        '<td><span class="cm-alloc-metric">' +
+        formatFloat(submittedSchedule) +
+        '</span></td>' +
+        '<td><span class="cm-alloc-metric">' +
+        formatFloat(genSchedule) +
+        '</span></td>' +
+        '<td><span class="cm-alloc-metric">' +
+        formatFloat(baseAlloc) +
+        '</span></td>' +
+        '<td><span class="cm-alloc-metric">' +
+        plantsCell +
+        '</span></td>' +
+        '<td><span class="cm-alloc-metric">' +
+        basePerPlantCell +
+        '</span></td>' +
+        '<td><span class="cm-alloc-metric">' +
+        formatFloat(unallocated) +
+        '</span></td>';
+      tbody.appendChild(tr);
+    });
+    if (totalAllocatedEl) totalAllocatedEl.textContent = formatFloat(sumGenerator);
+  }
+
+  function applySelectedRevisionView() {
+    var mode = scheduleRevisionSelect ? scheduleRevisionSelect.value : 'revision2';
+    updateBaseAllocationSummaryCards(currentSlots, currentNumPlants, mode);
+    renderAllocationSlotsTable(currentSlots, currentNumPlants, mode);
+  }
+
+  async function loadData(dateStr) {
+    setStatus('Loading…', true);
+    var tbody = document.getElementById('allocationSlotsTbody');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="9" class="py-3 text-muted">Loading…</td></tr>';
+    try {
+      var res = await fetchWithAuth('/api/consumer-allocation/?date=' + encodeURIComponent(dateStr));
+      var data = await res.json().catch(function () {
+        return {};
+      });
+      if (!res.ok) {
+        resetSummaryCards();
+        setStatus(data.detail || 'Failed to load', false);
+        renderAllocationSlotsTable([], 0);
+        return;
+      }
+
+      totalDemandEl.textContent = formatFloat(data.total_demand_mwh);
+      currentSlots = data.slots || [];
+      currentNumPlants = data.num_plants;
+      applySelectedRevisionView();
+      setStatus('Showing demand and generator schedule (latest revision) for selected day.', true);
+      loadPendingUploadRevisions(dateStr);
+    } catch (e) {
+      setStatus(e.message || 'Failed to load', false);
+      currentSlots = [];
+      currentNumPlants = 0;
+      resetSummaryCards();
+      renderAllocationSlotsTable([], 0);
+    }
+  }
+
+  var today = todayDateStr();
+  dateSelect.max = today;
+  dateSelect.value = today;
+
+  dateSelect.addEventListener('change', function () {
+    clearPendingRevTimer();
+    loadData(dateSelect.value);
+  });
+
+  var overrideSubmitBtn = document.getElementById('overrideGenUploadRevSubmit');
+  if (overrideSubmitBtn) {
+    overrideSubmitBtn.addEventListener('click', function () {
+      if (!overrideModalRevisionId) return;
+      var inputs = document.querySelectorAll('#overrideGenUploadRevTbody .override-slot-input');
+      var slots = [];
+      inputs.forEach(function (inp) {
+        var idx = parseInt(inp.getAttribute('data-slot-index'), 10);
+        slots.push({ slot_index: idx, supply_mwh: parseFloat(inp.value) });
+      });
+      resolveGeneratorUploadRevision(overrideModalRevisionId, 'override', slots);
+      var modalEl = document.getElementById('overrideGenUploadRevModal');
+      if (modalEl && window.bootstrap && window.bootstrap.Modal) {
+        window.bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+      }
+    });
+  }
+
+  if (scheduleRevisionSelect) {
+    scheduleRevisionSelect.addEventListener('change', function () {
+      applySelectedRevisionView();
+    });
+  }
+
+  if (exportSlotsBtn) {
+    exportSlotsBtn.addEventListener('click', function () {
+      var revision = scheduleRevisionSelect ? scheduleRevisionSelect.value : 'submitted';
+      exportTableToExcel('allocationSlotsTable', 'consumer_allocation_' + dateSelect.value + '_' + revision + '.xlsx');
+    });
+  }
+
+  loadData(dateSelect.value);
+})();
+</script>
+{% endblock %}

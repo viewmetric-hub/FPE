@@ -1,0 +1,38 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <title>{% block title %}Fourth Partner Energy · Sign in{% endblock %}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, shrink-to-fit=no" />
+    <link rel="icon" href="{% static 'kaiadmin/assets/img/kaiadmin/favicon.ico' %}" type="image/x-icon" />
+    <script src="{% static 'kaiadmin/assets/js/plugin/webfont/webfont.min.js' %}"></script>
+    <script>
+      WebFont.load({
+        google: { families: ["Public Sans:300,400,500,600,700"] },
+        custom: {
+          families: ["Font Awesome 5 Solid", "Font Awesome 5 Regular", "simple-line-icons"],
+          urls: ["{% static 'kaiadmin/assets/css/fonts.min.css' %}"],
+        },
+        active: function () {
+          sessionStorage.fonts = true;
+        },
+      });
+    </script>
+    <link rel="stylesheet" href="{% static 'kaiadmin/assets/css/bootstrap.min.css' %}" />
+    <link rel="stylesheet" href="{% static 'kaiadmin/assets/css/plugins.min.css' %}" />
+    <link rel="stylesheet" href="{% static 'kaiadmin/assets/css/kaiadmin.min.css' %}" />
+    <link rel="stylesheet" href="{% static 'kaiadmin/assets/css/demo.css' %}" />
+    {% block extra_head %}{% endblock %}
+  </head>
+  <body class="login">
+    <div class="wrapper wrapper-login">
+      {% block content %}{% endblock %}
+    </div>
+    <script src="{% static 'kaiadmin/assets/js/core/jquery-3.7.1.min.js' %}"></script>
+    <script src="{% static 'kaiadmin/assets/js/core/popper.min.js' %}"></script>
+    <script src="{% static 'kaiadmin/assets/js/core/bootstrap.min.js' %}"></script>
+    {% block extra_scripts %}{% endblock %}
+  </body>
+</html>

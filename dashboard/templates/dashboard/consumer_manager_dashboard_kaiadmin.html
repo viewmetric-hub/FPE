@@ -1,0 +1,455 @@
+{% extends "dashboard/consumer_manager_base_kaiadmin.html" %}
+{% load static %}
+
+{% block title %}Dashboard — ViewMetric{% endblock %}
+
+{% block kai_vendor_scripts %}
+  <script src="{% static 'kaiadmin/assets/js/plugin/chart.js/chart.min.js' %}"></script>
+{% endblock %}
+
+{% block content %}
+            <div class="row kai-stat-row g-3 pt-2">
+              <div class="col-6 col-lg-3 d-flex">
+                <div class="card card-stats card-round w-100">
+                  <div class="card-body">
+                    <div class="row align-items-center">
+                      <div class="col-icon">
+                        <div class="icon-big text-center icon-info bubble-shadow-small"><i class="fas fa-bolt"></i></div>
+                      </div>
+                      <div class="col col-stats ms-3 ms-sm-0">
+                        <div class="numbers">
+                          <p class="card-category">Overall supply <small class="text-muted fw-normal" data-cm-kpi-bracket></small></p>
+                          <h4 class="card-title" id="cmKpiSupply">—</h4>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-6 col-lg-3 d-flex">
+                <div class="card card-stats card-round w-100">
+                  <div class="card-body">
+                    <div class="row align-items-center">
+                      <div class="col-icon">
+                        <div class="icon-big text-center icon-primary bubble-shadow-small"><i class="fas fa-check-double"></i></div>
+                      </div>
+                      <div class="col col-stats ms-3 ms-sm-0">
+                        <div class="numbers">
+                          <p class="card-category">Overall approved <small class="text-muted fw-normal" data-cm-kpi-bracket></small></p>
+                          <h4 class="card-title" id="cmKpiApproved">—</h4>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-6 col-lg-3 d-flex">
+                <div class="card card-stats card-round w-100">
+                  <div class="card-body">
+                    <div class="row align-items-center">
+                      <div class="col-icon">
+                        <div class="icon-big text-center icon-success bubble-shadow-small"><i class="fas fa-chart-area"></i></div>
+                      </div>
+                      <div class="col col-stats ms-3 ms-sm-0">
+                        <div class="numbers">
+                          <p class="card-category">Overall demand <small class="text-muted fw-normal" data-cm-kpi-bracket></small></p>
+                          <h4 class="card-title" id="cmKpiDemand">—</h4>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-6 col-lg-3 d-flex">
+                <div class="card card-stats card-round w-100">
+                  <div class="card-body">
+                    <div class="row align-items-center">
+                      <div class="col-icon">
+                        <div class="icon-big text-center icon-secondary bubble-shadow-small"><i class="fas fa-calendar-check"></i></div>
+                      </div>
+                      <div class="col col-stats ms-3 ms-sm-0">
+                        <div class="numbers">
+                          <p class="card-category">Overall days approved <small class="text-muted fw-normal" data-cm-kpi-bracket></small></p>
+                          <h4 class="card-title" id="cmKpiDays">—</h4>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-0 mt-4 pt-2">
+              <h4 class="page-title mb-0"><span id="kaiDashboardTitleName">Energy Manager</span> Dashboard</h4>
+            </div>
+
+            <div class="row mt-3 pt-2">
+              <div class="col-12">
+                <div class="border rounded-3 shadow-sm overflow-hidden bg-white">
+                  <div class="row g-0 align-items-stretch kai-split-panel">
+                    <div class="col-lg-8">
+                      <div class="card card-round border-0 shadow-none h-100 rounded-0">
+                        <div class="card-header bg-white border-bottom">
+                          <div class="card-head-row">
+                            <div class="card-title">
+                              Supply, demand &amp; difference
+                              <small class="text-muted fw-normal">(histogram)</small>
+                              <small class="text-muted fw-normal" id="cmHistBracket"></small>
+                            </div>
+                            <div class="card-tools d-flex flex-wrap align-items-center gap-2">
+                              <select id="cmGraphRange" class="form-select form-select-sm" style="min-width: 11rem" aria-label="Date range">
+                                <option value="yesterday">Yesterday</option>
+                                <option value="tomorrow">Tomorrow</option>
+                                <option value="next7" selected>Next 7 days</option>
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="card-body">
+                          <div class="chart-container" style="min-height: 320px">
+                            <canvas id="cmMainChart"></canvas>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="col-lg-4 bg-primary">
+                      <div class="card card-primary card-round border-0 shadow-none h-100 rounded-0" style="background: transparent">
+                        <div class="card-header border-bottom border-white border-opacity-25" style="background: transparent">
+                          <div class="card-title text-white">
+                            Plant-wise supply, demand &amp; difference
+                            <small class="text-white-50 fw-normal" id="cmPlantBracket"></small>
+                          </div>
+                          <div class="card-category text-white-50 small" id="cmPlantSub">
+                            Approved gross supply, gross demand, and |supply − demand| per 15-minute slot for the focus day.
+                          </div>
+                        </div>
+                        <div class="card-body pb-3">
+                          <div class="mb-2">
+                            <label for="cmPlantSelect" class="form-label text-white-50 small mb-1">Plant</label>
+                            <select id="cmPlantSelect" class="form-select form-select-sm" style="max-width: 100%" aria-label="Plant for slot chart" disabled>
+                              <option value="">Loading…</option>
+                            </select>
+                          </div>
+                          <div class="chart-container" style="min-height: 280px">
+                            <canvas id="cmPlantBreakdownChart"></canvas>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+  var fetchWithAuth = window.kaiFetchWithAuth;
+  if (!fetchWithAuth) return;
+
+  var cmMainChart = null;
+  var cmPlantChart = null;
+
+  function fmtKpiNum(x) {
+    var n = parseFloat(x);
+    if (isNaN(n)) return '—';
+    return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  }
+
+  async function loadCmDashboardKpis() {
+    try {
+      var res = await fetchWithAuth('/api/consumer-manager/dashboard-kpis/');
+      var data = await res.json().catch(function () {
+        return {};
+      });
+      if (!res.ok) return;
+      var k = data.kpis || {};
+      var hb = k.heading_bracket || 'next 7 days';
+      document.querySelectorAll('[data-cm-kpi-bracket]').forEach(function (el) {
+        window.vmSetBracketLabel(el, hb);
+      });
+      var sup = document.getElementById('cmKpiSupply');
+      var appr = document.getElementById('cmKpiApproved');
+      var dem = document.getElementById('cmKpiDemand');
+      var days = document.getElementById('cmKpiDays');
+      if (sup) sup.textContent = fmtKpiNum(k.overall_supply_mwh) + ' MWh';
+      if (appr) appr.textContent = fmtKpiNum(k.overall_approved_mwh) + ' MWh';
+      if (dem) dem.textContent = fmtKpiNum(k.overall_demand_mwh) + ' MWh';
+      if (days) days.textContent = String(k.overall_days_approved != null ? k.overall_days_approved : '—');
+    } catch (e) {}
+  }
+
+  function destroyCmMainChart() {
+    try {
+      if (cmMainChart) cmMainChart.destroy();
+    } catch (e) {}
+    cmMainChart = null;
+  }
+
+  function destroyCmPlantChart() {
+    try {
+      if (cmPlantChart) cmPlantChart.destroy();
+    } catch (e) {}
+    cmPlantChart = null;
+  }
+
+  function renderMainChart(s) {
+    var ctx = document.getElementById('cmMainChart');
+    if (!ctx) return;
+    destroyCmMainChart();
+    var labels = s.labels || [];
+    cmMainChart = new Chart(ctx.getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            type: 'bar',
+            label: 'Supply (MWh)',
+            backgroundColor: 'rgba(23, 125, 255, 0.65)',
+            borderColor: '#177dff',
+            borderWidth: 1,
+            data: s.supply_mwh || [],
+            order: 3,
+          },
+          {
+            type: 'line',
+            label: 'Demand (MWh)',
+            fill: false,
+            backgroundColor: 'rgba(47, 125, 107, 0.12)',
+            borderColor: '#2F7D6B',
+            borderWidth: 2,
+            pointRadius: 2,
+            lineTension: 0.15,
+            data: s.demand_mwh || [],
+            order: 2,
+          },
+          {
+            type: 'line',
+            label: 'Difference (MWh)',
+            fill: false,
+            borderColor: '#f3545d',
+            backgroundColor: 'rgba(243, 84, 93, 0.08)',
+            borderWidth: 2,
+            borderDash: [6, 4],
+            pointRadius: 2,
+            lineTension: 0.15,
+            data: s.difference_mwh || [],
+            order: 1,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        legend: { display: true, position: 'bottom' },
+        tooltips: { mode: 'index', intersect: false },
+        scales: {
+          xAxes: [{ gridLines: { display: false }, ticks: { maxRotation: 45, minRotation: 0 } }],
+          yAxes: [{ ticks: { beginAtZero: true }, gridLines: { color: 'rgba(0,0,0,0.06)' } }],
+        },
+      },
+    });
+  }
+
+  function syncCmPlantSelect(plants, panelPlantId) {
+    var sel = document.getElementById('cmPlantSelect');
+    if (!sel) return;
+    var prev = sel.value;
+    sel.innerHTML = '';
+    var list = plants && plants.length ? plants : [];
+    if (!list.length) {
+      var opt0 = document.createElement('option');
+      opt0.value = '';
+      opt0.textContent = 'No plants';
+      sel.appendChild(opt0);
+      sel.disabled = true;
+      return;
+    }
+    sel.disabled = false;
+    list.forEach(function (p) {
+      var o = document.createElement('option');
+      o.value = String(p.id);
+      o.textContent = p.name || 'Plant ' + p.id;
+      sel.appendChild(o);
+    });
+    var want = panelPlantId != null ? String(panelPlantId) : '';
+    if (want && list.some(function (p) { return String(p.id) === want; })) {
+      sel.value = want;
+    } else if (prev && list.some(function (p) { return String(p.id) === prev; })) {
+      sel.value = prev;
+    } else {
+      sel.value = String(list[0].id);
+    }
+  }
+
+  function renderPlantChart(panel, meta, plants) {
+    var ctx = document.getElementById('cmPlantBreakdownChart');
+    if (!ctx) return;
+    destroyCmPlantChart();
+    var dayLbl = (meta && meta.day_label) || 'Focus day';
+    var sub = document.getElementById('cmPlantSub');
+    var plantName = '';
+    if (panel && panel.plant_id != null && plants && plants.length) {
+      var pid = panel.plant_id;
+      for (var i = 0; i < plants.length; i++) {
+        if (plants[i].id === pid) {
+          plantName = plants[i].name || '';
+          break;
+        }
+      }
+    }
+    if (sub) {
+      if (typeof window.vmIsRealtimeBracketLabel === 'function' && window.vmIsRealtimeBracketLabel(dayLbl)) {
+        sub.innerHTML =
+          'Approved gross supply, gross demand, and |supply − demand| per 15-minute slot for ' +
+          '<span style="color:#dc3545;font-weight:700">' +
+          window.vmEscapeHtml(String(dayLbl).trim()) +
+          '</span>' +
+          (plantName ? ' — ' + window.vmEscapeHtml(plantName) : '') +
+          '.';
+      } else {
+        sub.textContent =
+          'Approved gross supply, gross demand, and |supply − demand| per 15-minute slot for ' +
+          String(dayLbl).toLowerCase() +
+          (plantName ? ' — ' + plantName : '') +
+          '.';
+      }
+    }
+    var labels = (panel && panel.slot_labels) || [];
+    var sup = (panel && panel.supply_mwh) || [];
+    var dem = (panel && panel.demand_mwh) || [];
+    var diff = (panel && panel.difference_mwh) || [];
+    if (!labels.length) {
+      labels = ['—'];
+      sup = [0];
+      dem = [0];
+      diff = [0];
+    }
+    cmPlantChart = new Chart(ctx.getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            type: 'bar',
+            label: 'Supply (MWh)',
+            backgroundColor: 'rgba(255, 255, 255, 0.85)',
+            borderColor: 'rgba(23, 125, 255, 0.95)',
+            borderWidth: 1,
+            data: sup,
+            order: 3,
+          },
+          {
+            type: 'line',
+            label: 'Demand (MWh)',
+            fill: false,
+            backgroundColor: 'rgba(47, 125, 107, 0.2)',
+            borderColor: 'rgba(47, 125, 107, 1)',
+            borderWidth: 2,
+            pointRadius: 0,
+            pointHoverRadius: 3,
+            lineTension: 0.1,
+            data: dem,
+            order: 2,
+          },
+          {
+            type: 'line',
+            label: 'Difference (MWh)',
+            fill: false,
+            borderColor: 'rgba(243, 84, 93, 1)',
+            backgroundColor: 'rgba(243, 84, 93, 0.08)',
+            borderWidth: 2,
+            borderDash: [5, 4],
+            pointRadius: 0,
+            pointHoverRadius: 3,
+            lineTension: 0.1,
+            data: diff,
+            order: 1,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        legend: {
+          display: true,
+          position: 'bottom',
+          labels: { fontColor: '#fff', boxWidth: 12 },
+        },
+        tooltips: { mode: 'index', intersect: false },
+        scales: {
+          xAxes: [
+            {
+              ticks: {
+                fontColor: 'rgba(255,255,255,0.92)',
+                maxTicksLimit: 24,
+                autoSkip: true,
+                maxRotation: 0,
+                minRotation: 0,
+              },
+              gridLines: { color: 'rgba(255,255,255,0.12)' },
+            },
+          ],
+          yAxes: [
+            {
+              ticks: { beginAtZero: true, fontColor: 'rgba(255,255,255,0.92)' },
+              gridLines: { color: 'rgba(255,255,255,0.18)' },
+            },
+          ],
+        },
+      },
+    });
+  }
+
+  var cmPlantLoadSeq = 0;
+  async function loadCmDashboardKai() {
+    var grEl = document.getElementById('cmGraphRange');
+    var gr = grEl ? grEl.value : 'next7';
+    var plantSel = document.getElementById('cmPlantSelect');
+    var qPlant = '';
+    if (plantSel && plantSel.value) {
+      qPlant = '&plant_id=' + encodeURIComponent(plantSel.value);
+    }
+    var seq = ++cmPlantLoadSeq;
+    var res = await fetchWithAuth(
+      '/api/consumer-manager/dashboard-kai/?graph_range=' + encodeURIComponent(gr) + qPlant
+    );
+    var data = await res.json().catch(function () {
+      return {};
+    });
+    if (seq !== cmPlantLoadSeq) return;
+    if (!res.ok) {
+      alert(data.detail || 'Could not load dashboard charts.');
+      return;
+    }
+    var hb = document.getElementById('cmHistBracket');
+    if (hb) window.vmSetBracketLabel(hb, data.graph_heading_bracket || '');
+    var pb = document.getElementById('cmPlantBracket');
+    if (pb) window.vmSetBracketLabel(pb, (data.plant_card_meta && data.plant_card_meta.day_label) || '');
+    renderMainChart(data.series || {});
+    var plants = data.plants || [];
+    var panel = data.plant_slot_panel;
+    syncCmPlantSelect(plants, panel && panel.plant_id);
+    renderPlantChart(panel, data.plant_card_meta || {}, plants);
+  }
+
+  var gr = document.getElementById('cmGraphRange');
+  if (gr) {
+    gr.addEventListener('change', function () {
+      loadCmDashboardKai();
+    });
+  }
+  var cmPs = document.getElementById('cmPlantSelect');
+  if (cmPs) {
+    cmPs.addEventListener('change', function () {
+      loadCmDashboardKai();
+    });
+  }
+
+  loadCmDashboardKpis();
+  loadCmDashboardKai();
+})();
+</script>
+{% endblock %}

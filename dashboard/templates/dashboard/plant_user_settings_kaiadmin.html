@@ -1,0 +1,413 @@
+{% extends "dashboard/plant_user_base_kaiadmin.html" %}
+{% load static %}
+
+{% block title %}Settings — ViewMetric{% endblock %}
+
+{% block extra_head %}
+<style>
+  .kai-settings-section-card {
+    border: 1px solid rgba(21, 114, 232, 0.18);
+    box-shadow: 0 6px 24px rgba(21, 114, 232, 0.1);
+    overflow: hidden;
+  }
+  .kai-settings-gradient-header {
+    background: linear-gradient(135deg, #1572e8 0%, #1269db 48%, #0d5bbd 100%) !important;
+    border: none !important;
+    padding-top: 1rem !important;
+    padding-bottom: 1rem !important;
+    box-shadow: 0 3px 12px rgba(21, 114, 232, 0.35);
+  }
+  .kai-settings-gradient-header .card-title {
+    color: #fff !important;
+    font-weight: 700;
+    font-size: 0.82rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .kai-settings-gradient-header .text-muted {
+    color: rgba(255, 255, 255, 0.88) !important;
+  }
+  .kai-settings-card .card-body .form-label {
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: #495057;
+  }
+  .kai-settings-input {
+    border: 1px solid rgba(21, 114, 232, 0.35);
+    background: rgba(21, 114, 232, 0.06);
+    border-radius: 8px;
+    font-weight: 500;
+    color: #1a1d2e;
+  }
+  .kai-settings-input:focus {
+    border-color: #1572e8;
+    background: #fff;
+    box-shadow: 0 0 0 0.2rem rgba(21, 114, 232, 0.22);
+  }
+  .kai-settings-input::file-selector-button {
+    margin-right: 0.75rem;
+    padding: 0.35rem 0.75rem;
+    border-radius: 6px;
+    border: 1px solid rgba(21, 114, 232, 0.4);
+    background: rgba(21, 114, 232, 0.12);
+    font-weight: 600;
+    color: #0d5bbd;
+  }
+  .kai-settings-notify-list {
+    border: 1px solid rgba(21, 114, 232, 0.18);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 4px 16px rgba(21, 114, 232, 0.08);
+  }
+  .kai-settings-notify-list .list-group-item {
+    border-color: rgba(21, 114, 232, 0.1);
+  }
+  .kai-settings-switch .form-check-input {
+    width: 2.5rem;
+    height: 1.25rem;
+    cursor: pointer;
+    border-color: rgba(21, 114, 232, 0.45);
+  }
+  .kai-settings-switch .form-check-input:checked {
+    background-color: #1572e8;
+    border-color: #1572e8;
+  }
+  .kai-settings-switch .form-check-label { cursor: pointer; padding-left: 0.35rem; }
+  #profileLogoPreviewWrap img {
+    border-color: rgba(21, 114, 232, 0.25) !important;
+    box-shadow: 0 2px 8px rgba(21, 114, 232, 0.12);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+            <div class="mb-4 pt-2">
+              <div class="page-pretitle">Account</div>
+              <h3 class="fw-bold mb-2">Settings</h3>
+              <p class="text-muted mb-0" style="max-width: 40rem">Manage your profile, password, and notification preferences.</p>
+            </div>
+
+            <div id="settingsGlobalError" class="alert alert-danger d-none" role="alert"></div>
+            <div id="settingsGlobalOk" class="alert alert-success d-none" role="alert"></div>
+
+            <div class="row">
+              <div class="col-12 col-xl-10 col-xxl-8">
+                <div class="card card-round mb-4 kai-settings-card kai-settings-section-card">
+                  <div class="card-header kai-settings-gradient-header border-0">
+                    <h4 class="card-title mb-1">Profile</h4>
+                    <p class="text-muted small mb-0">Your name and email are used across the platform.</p>
+                  </div>
+                  <div class="card-body">
+                    <div class="mb-3">
+                      <label class="form-label" for="profileName">Name</label>
+                      <input type="text" id="profileName" autocomplete="name" class="form-control kai-settings-input" placeholder="Your name" />
+                    </div>
+                    <div class="mb-3">
+                      <label class="form-label" for="profileEmail">Email</label>
+                      <input type="email" id="profileEmail" autocomplete="email" class="form-control kai-settings-input" placeholder="you@company.com" />
+                    </div>
+                    <div class="mb-3">
+                      <label class="form-label" for="profileLogo">Logo</label>
+                      <input type="file" id="profileLogo" name="logo" accept="image/*" class="form-control form-control-sm kai-settings-input" />
+                      <small class="text-muted d-block mt-1">Shown in the sidebar. PNG or JPG recommended.</small>
+                      <div id="profileLogoPreviewWrap" class="mt-3 d-none">
+                        <img id="profileLogoPreview" src="" alt="" class="rounded border bg-white p-2" style="max-height: 72px; width: auto; max-width: 100%; object-fit: contain" />
+                      </div>
+                    </div>
+                    <div class="d-flex flex-wrap align-items-center gap-3">
+                      <button type="button" id="btnSaveProfile" class="btn btn-primary">
+                        <span class="btn-label"><i class="fas fa-save"></i></span>
+                        Save profile
+                      </button>
+                      <span id="profileSaveStatus" class="text-muted small d-none"></span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="card card-round mb-4 kai-settings-card kai-settings-section-card">
+                  <div class="card-header kai-settings-gradient-header border-0">
+                    <h4 class="card-title mb-1">Password</h4>
+                    <p class="text-muted small mb-0">Use a strong password you do not use elsewhere.</p>
+                  </div>
+                  <div class="card-body">
+                    <div class="mb-3">
+                      <label class="form-label" for="currentPassword">Current password</label>
+                      <input type="password" id="currentPassword" autocomplete="current-password" class="form-control kai-settings-input" />
+                    </div>
+                    <div class="mb-3">
+                      <label class="form-label" for="newPassword">New password</label>
+                      <input type="password" id="newPassword" autocomplete="new-password" class="form-control kai-settings-input" />
+                      <small class="text-muted">At least 8 characters.</small>
+                    </div>
+                    <div class="mb-3">
+                      <label class="form-label" for="confirmPassword">Confirm new password</label>
+                      <input type="password" id="confirmPassword" autocomplete="new-password" class="form-control kai-settings-input" />
+                    </div>
+                    <button type="button" id="btnChangePassword" class="btn btn-label-secondary">
+                      <span class="btn-label"><i class="fas fa-key"></i></span>
+                      Update password
+                    </button>
+                  </div>
+                </div>
+
+                <div class="card card-round mb-4 kai-settings-card kai-settings-section-card">
+                  <div class="card-header kai-settings-gradient-header border-0">
+                    <h4 class="card-title mb-1">Notifications</h4>
+                    <p class="text-muted small mb-0">Preferences are stored on this device.</p>
+                  </div>
+                  <div class="card-body">
+                    <ul class="list-group list-group-flush kai-settings-notify-list">
+                      <li class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-3 kai-settings-switch py-3">
+                        <div>
+                          <div class="fw-semibold">Email alerts</div>
+                          <small class="text-muted">Summary and important updates by email</small>
+                        </div>
+                        <div class="form-check form-switch m-0">
+                          <input class="form-check-input" type="checkbox" id="toggleEmailAlerts" />
+                        </div>
+                      </li>
+                      <li class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-3 kai-settings-switch py-3">
+                        <div>
+                          <div class="fw-semibold">Allocation updates</div>
+                          <small class="text-muted">When generator allocation changes</small>
+                        </div>
+                        <div class="form-check form-switch m-0">
+                          <input class="form-check-input" type="checkbox" id="toggleAllocation" />
+                        </div>
+                      </li>
+                      <li class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-3 kai-settings-switch py-3">
+                        <div>
+                          <div class="fw-semibold">Market &amp; IEX notices</div>
+                          <small class="text-muted">Price and schedule reminders</small>
+                        </div>
+                        <div class="form-check form-switch m-0">
+                          <input class="form-check-input" type="checkbox" id="toggleMarket" />
+                        </div>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+  try {
+    var t = localStorage.getItem('accessToken');
+    if (t) {
+      var payload = JSON.parse(
+        atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))
+      );
+      var r = payload && payload.role;
+      if (r === 'GENERATOR') {
+        window.location.replace('{% url "generator_settings" %}');
+        return;
+      }
+      if (r && r !== 'PLANT_USER') {
+        window.location.replace('{% url "settings" %}');
+        return;
+      }
+    }
+  } catch (e) {}
+
+  var fetchWithAuth = window.kaiFetchWithAuth;
+  if (!fetchWithAuth) return;
+
+  var LS_EMAIL = 'vm_settings_notify_email';
+  var LS_ALLOC = 'vm_settings_notify_allocation';
+  var LS_MARKET = 'vm_settings_notify_market';
+
+  function showGlobal(kind, msg) {
+    var err = document.getElementById('settingsGlobalError');
+    var ok = document.getElementById('settingsGlobalOk');
+    err.classList.add('d-none');
+    ok.classList.add('d-none');
+    if (!msg) return;
+    if (kind === 'error') {
+      err.textContent = msg;
+      err.classList.remove('d-none');
+    } else {
+      ok.textContent = msg;
+      ok.classList.remove('d-none');
+    }
+  }
+
+  var nameEl = document.getElementById('profileName');
+  var emailEl = document.getElementById('profileEmail');
+  var logoInput = document.getElementById('profileLogo');
+  var logoPreview = document.getElementById('profileLogoPreview');
+  var logoPreviewWrap = document.getElementById('profileLogoPreviewWrap');
+  var profileStatus = document.getElementById('profileSaveStatus');
+  var logoPreviewObjectUrl = null;
+
+  function setLogoPreviewFromUrl(url) {
+    if (logoPreviewObjectUrl) {
+      URL.revokeObjectURL(logoPreviewObjectUrl);
+      logoPreviewObjectUrl = null;
+    }
+    if (url) {
+      logoPreview.src = url;
+      logoPreviewWrap.classList.remove('d-none');
+    } else {
+      logoPreview.removeAttribute('src');
+      logoPreviewWrap.classList.add('d-none');
+    }
+  }
+
+  logoInput.addEventListener('change', function () {
+    var f = logoInput.files && logoInput.files[0];
+    if (logoPreviewObjectUrl) {
+      URL.revokeObjectURL(logoPreviewObjectUrl);
+      logoPreviewObjectUrl = null;
+    }
+    if (f) {
+      logoPreviewObjectUrl = URL.createObjectURL(f);
+      logoPreview.src = logoPreviewObjectUrl;
+      logoPreviewWrap.classList.remove('d-none');
+    } else if (nameEl.dataset.logoUrl) {
+      setLogoPreviewFromUrl(nameEl.dataset.logoUrl);
+    } else {
+      setLogoPreviewFromUrl('');
+    }
+  });
+
+  function loadNotificationToggles() {
+    document.getElementById('toggleEmailAlerts').checked = localStorage.getItem(LS_EMAIL) === '1';
+    document.getElementById('toggleAllocation').checked = localStorage.getItem(LS_ALLOC) === '1';
+    document.getElementById('toggleMarket').checked = localStorage.getItem(LS_MARKET) === '1';
+  }
+
+  ['toggleEmailAlerts', 'toggleAllocation', 'toggleMarket'].forEach(function (id) {
+    document.getElementById(id).addEventListener('change', function () {
+      var map = { toggleEmailAlerts: LS_EMAIL, toggleAllocation: LS_ALLOC, toggleMarket: LS_MARKET };
+      localStorage.setItem(map[id], this.checked ? '1' : '0');
+    });
+  });
+
+  async function loadProfile() {
+    showGlobal(null, '');
+    try {
+      var res = await fetchWithAuth('/api/me/', { method: 'GET' });
+      var data = await res.json().catch(function () {
+        return {};
+      });
+      if (!res.ok) {
+        showGlobal('error', data.detail || 'Could not load profile.');
+        return;
+      }
+      nameEl.value = data.name || '';
+      emailEl.value = data.email || '';
+      nameEl.dataset.logoUrl = data.logo_url || '';
+      if (data.logo_url) {
+        setLogoPreviewFromUrl(data.logo_url);
+      } else {
+        setLogoPreviewFromUrl('');
+      }
+      logoInput.value = '';
+    } catch (e) {
+      showGlobal('error', 'Could not load profile.');
+    }
+  }
+
+  document.getElementById('btnSaveProfile').addEventListener('click', async function () {
+    showGlobal(null, '');
+    profileStatus.classList.add('d-none');
+    var name = (nameEl.value || '').trim();
+    var email = (emailEl.value || '').trim();
+    if (!name || !email) {
+      showGlobal('error', 'Name and email are required.');
+      return;
+    }
+    try {
+      var fd = new FormData();
+      fd.append('name', name);
+      fd.append('email', email);
+      var file = logoInput.files && logoInput.files[0];
+      if (file) fd.append('logo', file);
+
+      var res = await fetchWithAuth('/api/me/', {
+        method: 'PATCH',
+        body: fd,
+      });
+      var data = await res.json().catch(function () {
+        return {};
+      });
+      if (!res.ok) {
+        showGlobal('error', data.detail || 'Could not save profile.');
+        return;
+      }
+      nameEl.value = data.name || '';
+      emailEl.value = data.email || '';
+      nameEl.dataset.logoUrl = data.logo_url || '';
+      logoInput.value = '';
+      if (logoPreviewObjectUrl) {
+        URL.revokeObjectURL(logoPreviewObjectUrl);
+        logoPreviewObjectUrl = null;
+      }
+      if (data.logo_url) {
+        setLogoPreviewFromUrl(data.logo_url);
+      } else {
+        setLogoPreviewFromUrl('');
+      }
+      if (typeof window.kaiRefreshBrandLogos === 'function') {
+        window.kaiRefreshBrandLogos();
+      }
+      if (typeof window.vmRefreshSidebarLogo === 'function') {
+        window.vmRefreshSidebarLogo();
+      }
+      showGlobal('ok', 'Profile saved.');
+      profileStatus.textContent = 'Saved';
+      profileStatus.classList.remove('d-none');
+      setTimeout(function () {
+        profileStatus.classList.add('d-none');
+      }, 2500);
+    } catch (e) {
+      showGlobal('error', 'Could not save profile.');
+    }
+  });
+
+  document.getElementById('btnChangePassword').addEventListener('click', async function () {
+    showGlobal(null, '');
+    var current = document.getElementById('currentPassword').value;
+    var nw = document.getElementById('newPassword').value;
+    var confirm = document.getElementById('confirmPassword').value;
+    if (!current || !nw) {
+      showGlobal('error', 'Enter your current password and a new password.');
+      return;
+    }
+    if (nw.length < 8) {
+      showGlobal('error', 'New password must be at least 8 characters.');
+      return;
+    }
+    if (nw !== confirm) {
+      showGlobal('error', 'New password and confirmation do not match.');
+      return;
+    }
+    try {
+      var res = await fetchWithAuth('/api/password/change/', {
+        method: 'POST',
+        body: JSON.stringify({ old_password: current, new_password: nw }),
+      });
+      var data = await res.json().catch(function () {
+        return {};
+      });
+      if (!res.ok) {
+        showGlobal('error', data.detail || 'Could not update password.');
+        return;
+      }
+      document.getElementById('currentPassword').value = '';
+      document.getElementById('newPassword').value = '';
+      document.getElementById('confirmPassword').value = '';
+      showGlobal('ok', data.detail || 'Password updated.');
+    } catch (e) {
+      showGlobal('error', 'Could not update password.');
+    }
+  });
+
+  loadNotificationToggles();
+  loadProfile();
+})();
+</script>
+{% endblock %}

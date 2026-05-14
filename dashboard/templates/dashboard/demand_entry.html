@@ -1,0 +1,220 @@
+{% extends "dashboard/base_viewmetric.html" %}
+{% load static %}
+
+{% block title %}Demand Entry — ViewMetric{% endblock %}
+
+{% block body %}
+<div class="flex bg-[#F7F9FB] min-h-screen w-full min-w-0 max-w-full overflow-x-hidden">
+  <aside class="vm-sidebar-column flex flex-col shrink-0 w-64 min-h-screen bg-white border-r border-gray-200">
+    {% include 'dashboard/includes/sidebar.html' %}
+  </aside>
+
+  <main class="flex-1 min-w-0 max-w-full overflow-x-hidden p-4 md:p-6">
+    <h2 class="text-2xl font-bold text-primary tracking-tight mb-6">Facility Demand Schedule (15 Minute Interval)</h2>
+
+    <div class="bg-card rounded-2xl shadow-sm p-5 ring-1 ring-gray-100">
+      <div class="flex flex-wrap gap-6 items-end">
+        <div class="min-w-[200px]">
+          <label class="block text-sm font-medium text-gray-600">Select Day</label>
+          <select id="daySelect" class="mt-2 border border-gray-200 rounded-lg px-3 py-2 w-full text-sm focus:ring-2 focus:ring-primary outline-none bg-white"></select>
+        </div>
+        <label class="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer pb-2">
+          <input id="shutdownCheckbox" type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary" />
+          Shutdown this day
+        </label>
+      </div>
+
+      <div class="overflow-x-auto rounded-xl border border-gray-100 shadow-sm mt-4">
+        <table class="w-full bg-white text-sm" id="slotsTable">
+          <thead class="bg-gray-100 text-gray-500">
+            <tr>
+              <th class="text-left font-medium px-4 py-3 w-[70px]">Slot</th>
+              <th class="text-left font-medium px-4 py-3 w-[140px]">Time Block</th>
+              <th class="text-left font-medium px-4 py-3">Demand Entry</th>
+              <th class="text-left font-medium px-4 py-3 w-[140px]">Allocated (MW)</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100 text-gray-700"></tbody>
+        </table>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
+        <div class="bg-card rounded-2xl shadow-sm p-5 ring-1 ring-gray-100">
+          <p class="text-gray-400 text-sm">Total Demand</p>
+          <h2 class="text-3xl font-bold text-gray-800 mt-1" id="totalDemand">0</h2>
+        </div>
+        <div class="bg-card rounded-2xl shadow-sm p-5 ring-1 ring-gray-100">
+          <p class="text-gray-400 text-sm">Total Allocated</p>
+          <h2 class="text-3xl font-bold text-gray-800 mt-1" id="totalAllocated">0</h2>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap gap-3 mt-6">
+        <button type="button" id="saveBtn" class="bg-primary text-white px-5 py-2 rounded-lg shadow hover:opacity-90 transition font-medium">Submit Demand Schedule</button>
+        <button type="button" id="deleteBtn" class="bg-gray-100 text-gray-800 px-5 py-2 rounded-lg hover:bg-gray-200 transition font-medium">Delete this day</button>
+      </div>
+
+      <div class="text-sm mt-4" id="statusMsg" aria-live="polite"></div>
+    </div>
+  </main>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    const accessToken = localStorage.getItem('accessToken');
+    if (!accessToken) window.location.href = '/login/';
+
+    function apiHeaders() {
+      return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + accessToken };
+    }
+
+    function formatFloat(v) {
+      const n = Number(v);
+      if (Number.isNaN(n)) return '0';
+      return n.toFixed(2).replace(/\.?0+$/,'');
+    }
+
+    const daySelect = document.getElementById('daySelect');
+    const shutdownCheckbox = document.getElementById('shutdownCheckbox');
+    const slotsTbody = document.getElementById('slotsTable').querySelector('tbody');
+    const totalDemandEl = document.getElementById('totalDemand');
+    const totalAllocatedEl = document.getElementById('totalAllocated');
+    const statusMsg = document.getElementById('statusMsg');
+
+    function buildDayOptions() {
+      const base = new Date();
+      base.setHours(0,0,0,0);
+
+      daySelect.innerHTML = '';
+      for (let i = 0; i <= 30; i++) {
+        const d = new Date(base.getTime() + i*24*60*60*1000);
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth()+1).padStart(2,'0');
+        const dd = String(d.getDate()).padStart(2,'0');
+        const dateStr = `${yyyy}-${mm}-${dd}`;
+        const opt = document.createElement('option');
+        opt.value = dateStr;
+        opt.textContent = (i === 0) ? 'Today' : d.toLocaleDateString(undefined, { weekday:'short', month:'short', day:'numeric' });
+        daySelect.appendChild(opt);
+      }
+    }
+
+    buildDayOptions();
+
+    function getSelectedDate() {
+      return daySelect.value;
+    }
+
+    function setStatus(msg, ok=true) {
+      statusMsg.textContent = msg || '';
+      statusMsg.className = 'text-sm mt-4 ' + (ok ? 'text-green-700' : 'text-red-600');
+    }
+
+    const inpCls = 'demandInput border border-gray-200 rounded-lg px-3 py-2 w-full max-w-[120px] focus:ring-2 focus:ring-primary outline-none';
+
+    async function loadDay(dateStr) {
+      slotsTbody.innerHTML = '<tr><td colspan="4" class="px-4 py-3">Loading...</td></tr>';
+      setStatus('', true);
+
+      const res = await fetch('/api/demand-entry/?date=' + encodeURIComponent(dateStr), { headers: apiHeaders() });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        slotsTbody.innerHTML = '<tr><td colspan="4" class="px-4 py-3">Failed to load schedule</td></tr>';
+        setStatus(data.detail || 'Failed to load', false);
+        return;
+      }
+
+      const shutdown = !!data.shutdown;
+      shutdownCheckbox.checked = shutdown;
+
+      slotsTbody.innerHTML = '';
+
+      let total = 0;
+      data.slots.forEach(slot => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-gray-50 transition';
+        tr.innerHTML = `
+          <td class="px-4 py-2">${slot.slot_index}</td>
+          <td class="px-4 py-2">${slot.time_block || slot.slot_time}</td>
+          <td class="px-4 py-2">
+            <input class="${inpCls}" data-slot-index="${slot.slot_index}" type="number" step="0.01" min="0" value="${formatFloat(slot.demand_mw)}" ${shutdown ? 'disabled' : ''}/>
+          </td>
+          <td class="px-4 py-2">0</td>
+        `;
+        slotsTbody.appendChild(tr);
+        if (!shutdown) total += Number(slot.demand_mw || 0);
+      });
+
+      totalDemandEl.textContent = shutdown ? '0' : formatFloat(total);
+      totalAllocatedEl.textContent = '0';
+    }
+
+    daySelect.addEventListener('change', async () => {
+      await loadDay(getSelectedDate());
+    });
+
+    shutdownCheckbox.addEventListener('change', async () => {
+      const shutdown = shutdownCheckbox.checked;
+      const inputs = Array.from(slotsTbody.querySelectorAll('input.demandInput'));
+
+      if (shutdown) {
+        inputs.forEach(inp => {
+          inp.value = '0';
+          inp.disabled = true;
+        });
+        totalDemandEl.textContent = '0';
+        return;
+      }
+
+      await loadDay(getSelectedDate());
+    });
+
+    async function saveDay() {
+      const dateStr = getSelectedDate();
+      const shutdown = shutdownCheckbox.checked;
+
+      const inputs = Array.from(slotsTbody.querySelectorAll('input.demandInput'));
+      if (inputs.length !== 96) {
+        setStatus('Schedule table is not ready (need 96 slots).', false);
+        return;
+      }
+
+      const slots = inputs.map(inp => {
+        return { slot_index: parseInt(inp.getAttribute('data-slot-index'), 10), demand_mw: parseFloat(inp.value || '0') };
+      });
+
+      const payload = { date: dateStr, shutdown, slots };
+      setStatus('Saving...', true);
+
+      const res = await fetch('/api/demand-entry/', { method: 'POST', headers: apiHeaders(), body: JSON.stringify(payload) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setStatus(data.detail || 'Save failed', false);
+        return;
+      }
+      setStatus('Saved successfully.', true);
+      await loadDay(dateStr);
+    }
+
+    async function deleteDay() {
+      const dateStr = getSelectedDate();
+      if (!confirm('Delete demand schedule for this day?')) return;
+      setStatus('Deleting...', true);
+
+      const res = await fetch('/api/demand-entry/?date=' + encodeURIComponent(dateStr), { method: 'DELETE', headers: apiHeaders() });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setStatus(data.detail || 'Delete failed', false);
+        return;
+      }
+      setStatus('Deleted successfully.', true);
+      await loadDay(dateStr);
+    }
+
+    document.getElementById('saveBtn').addEventListener('click', saveDay);
+    document.getElementById('deleteBtn').addEventListener('click', deleteDay);
+
+    loadDay(getSelectedDate());
+</script>
+{% endblock %}

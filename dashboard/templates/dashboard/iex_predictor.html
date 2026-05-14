@@ -1,0 +1,240 @@
+{% extends "dashboard/consumer_manager_base_kaiadmin.html" %}
+{% load static %}
+
+{% block title %}IEX Predictor — ViewMetric{% endblock %}
+
+{% block extra_head %}
+<style>
+  .kai-edit-slots-wrap {
+    max-height: min(58vh, 520px);
+    overflow: auto;
+    border-radius: 12px;
+    border: 1px solid rgba(21, 114, 232, 0.18);
+    box-shadow: 0 6px 24px rgba(21, 114, 232, 0.1);
+    background: #fff;
+  }
+  .kai-edit-slots-table {
+    margin-bottom: 0;
+    --bs-table-striped-bg: rgba(21, 114, 232, 0.055);
+    --bs-table-hover-bg: rgba(21, 114, 232, 0.12);
+    border-color: transparent;
+    font-size: 0.875rem;
+  }
+  .kai-edit-slots-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    font-size: 0.68rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: #fff !important;
+    border: none !important;
+    padding: 0.75rem 0.5rem !important;
+    background: linear-gradient(135deg, #1572e8 0%, #1269db 48%, #0d5bbd 100%) !important;
+    box-shadow: 0 3px 10px rgba(21, 114, 232, 0.35);
+    white-space: nowrap;
+  }
+  .kai-edit-slots-table tbody td {
+    vertical-align: middle;
+    border-color: rgba(21, 114, 232, 0.1);
+  }
+  .kai-iex-pred-val {
+    font-weight: 600;
+    color: #1572e8;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+            <div class="mb-3 pt-2">
+              <div class="page-pretitle">Markets</div>
+              <h3 class="fw-bold mb-1">IEX Predictor</h3>
+              <p class="text-muted small mb-0" style="max-width: 42rem">
+                Slot-wise MCP (<strong>₹/kWh</strong>) from <strong>viewmetric.in/iex-predictor</strong>.
+                Charts and summary metrics (avg/max/min, trend, distribution) are on
+                <a href="{% url 'reports' %}" class="fw-semibold">Reports</a> → IEX section.
+              </p>
+            </div>
+
+            <div class="card card-round mb-4">
+              <div class="card-header">
+                <div class="card-head-row">
+                  <div class="card-title">Select date</div>
+                  <div class="card-tools d-flex flex-wrap align-items-center gap-2">
+                    <select id="dateSelect" class="form-select form-select-sm" style="min-width: 14rem" aria-label="Select date"></select>
+                    <button type="button" id="btnLoad" class="btn btn-primary btn-sm">Show Predictions</button>
+                  </div>
+                </div>
+              </div>
+              <div class="card-body pt-3">
+                <p id="loadStatus" class="text-muted small mb-0" aria-live="polite"></p>
+              </div>
+            </div>
+
+            <div class="card card-round">
+              <div class="card-header">
+                <div class="card-head-row">
+                  <div class="card-title">Market snapshot — prediction</div>
+                </div>
+                <p class="text-muted small mb-0">15-min blocks · <strong>₹/kWh</strong></p>
+              </div>
+              <div class="card-body pt-2">
+                <div class="kai-edit-slots-wrap table-responsive">
+                  <table class="table table-striped table-hover align-middle kai-edit-slots-table mb-0">
+                    <thead>
+                      <tr>
+                        <th>Time block</th>
+                        <th>Block</th>
+                        <th>Predicted MCP (₹/kWh)</th>
+                        <th>Actual MCP (₹/kWh)</th>
+                        <th>Error percentage</th>
+                      </tr>
+                    </thead>
+                    <tbody id="predictionsTbody"></tbody>
+                  </table>
+                </div>
+                <p id="noData" class="text-muted small mb-0 mt-3 d-none">No data.</p>
+              </div>
+            </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+  var fetchWithAuth = window.kaiFetchWithAuth;
+  if (!fetchWithAuth) return;
+
+  const dateSelect = document.getElementById('dateSelect');
+  const today = new Date();
+  for (let i = -1; i < 8; i++) {
+    const d = new Date(today);
+    d.setDate(d.getDate() + i);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const label = i === -1 ? 'Yesterday' : i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : i === 2 ? 'Day After' : d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+    const opt = document.createElement('option');
+    opt.value = `${y}-${m}-${day}`;
+    opt.textContent = `${label} (${y}-${m}-${day})`;
+    dateSelect.appendChild(opt);
+  }
+  dateSelect.value = (() => {
+    const t = new Date(today);
+    t.setDate(t.getDate() - 1);
+    return t.toISOString().slice(0, 10);
+  })();
+
+  function isoDateToDeliveryPeriod(iso) {
+    const parts = iso.split('-');
+    if (parts.length !== 3) return 'yesterday';
+    const sel = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    const now = new Date();
+    const today0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const s0 = new Date(sel.getFullYear(), sel.getMonth(), sel.getDate());
+    const diff = Math.round((s0 - today0) / 86400000);
+    if (diff === -1) return 'yesterday';
+    if (diff === 0) return 'today';
+    if (diff === 1) return 'tomorrow';
+    if (diff < -1) return 'yesterday';
+    return 'tomorrow';
+  }
+
+  function slotIndexToTimeBlock(slotIndex) {
+    const startMins = (slotIndex - 1) * 15;
+    const endMins = slotIndex * 15;
+    const fmt = (mins) => {
+      const h = Math.floor(mins / 60) % 24;
+      const m = mins % 60;
+      return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+    };
+    return fmt(startMins) + ' - ' + fmt(endMins);
+  }
+
+  function format2(v) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return '—';
+    return n.toFixed(2);
+  }
+
+  function errorPercentageParts(predicted, actual) {
+    const p = Number(predicted);
+    const a = Number(actual);
+    if (!Number.isFinite(p) || !Number.isFinite(a) || a === 0) {
+      return { text: '—', absPct: null };
+    }
+    const pct = (p - a) / a * 100;
+    return { text: pct.toFixed(2) + '%', absPct: Math.abs(pct) };
+  }
+
+  document.getElementById('btnLoad').addEventListener('click', async () => {
+    const statusEl = document.getElementById('loadStatus');
+    const tbody = document.getElementById('predictionsTbody');
+    const noDataEl = document.getElementById('noData');
+
+    statusEl.classList.remove('text-danger');
+    statusEl.classList.add('text-muted');
+    statusEl.textContent = 'Loading predictions...';
+    tbody.innerHTML = '';
+    noDataEl.classList.add('d-none');
+
+    try {
+      const dp = isoDateToDeliveryPeriod(dateSelect.value);
+      const res = await fetchWithAuth('/api/iex-scraped-predictions/?delivery_period=' + encodeURIComponent(dp));
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        statusEl.textContent = data.detail || data.error || 'Failed to load predictions';
+        statusEl.classList.remove('text-muted');
+        statusEl.classList.add('text-danger');
+        noDataEl.classList.remove('d-none');
+        return;
+      }
+
+      const slots = data.slots || [];
+      if (slots.length === 0) {
+        statusEl.textContent = 'No predictions available.';
+        statusEl.classList.remove('text-danger');
+        statusEl.classList.add('text-muted');
+        noDataEl.classList.remove('d-none');
+        return;
+      }
+
+      statusEl.classList.remove('text-danger');
+      statusEl.classList.add('text-muted');
+
+      const rows = slots.map((s, idx) => {
+        const slotIdx = s.slot_index || (idx + 1);
+        const timeBlock = (s.time_block && s.time_block.trim()) ? s.time_block : slotIndexToTimeBlock(slotIdx);
+        const predKwh = s.predicted_mcp_rs_per_kwh != null ? s.predicted_mcp_rs_per_kwh : (parseFloat(s.mcp_rs_per_mwh || 0) / 1000);
+        const actualNum = s.actual_mcp_rs_per_kwh != null ? Number(s.actual_mcp_rs_per_kwh) : NaN;
+        const actualKwh = Number.isFinite(actualNum) ? actualNum.toFixed(2) : '—';
+        const err = errorPercentageParts(predKwh, actualNum);
+        const errCls = err.absPct === null
+          ? ''
+          : (err.absPct > 3 ? 'text-danger fw-semibold' : 'text-success fw-medium');
+        return `<tr>
+          <td class="text-nowrap">${timeBlock}</td>
+          <td class="text-nowrap">${slotIdx}</td>
+          <td class="text-nowrap kai-iex-pred-val">${format2(predKwh)}</td>
+          <td class="text-nowrap">${actualKwh}</td>
+          <td class="text-nowrap ${errCls}">${err.text}</td>
+        </tr>`;
+      }).join('');
+      tbody.innerHTML = rows;
+
+      const mode = data.has_actual ? 'Includes actual where provided on ViewMetric' : 'Prediction only';
+      const src = data.source ? ` · ${data.source}` : '';
+      statusEl.textContent = `Showing ${slots.length} slots. ${mode}${src}`;
+    } catch (e) {
+      statusEl.textContent = 'Error loading predictions.';
+      statusEl.classList.remove('text-muted');
+      statusEl.classList.add('text-danger');
+      noDataEl.classList.remove('d-none');
+    }
+  });
+
+  document.getElementById('btnLoad').click();
+})();
+</script>
+{% endblock %}

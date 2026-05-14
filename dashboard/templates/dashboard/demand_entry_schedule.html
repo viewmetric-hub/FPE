@@ -1,0 +1,671 @@
+{% extends "dashboard/plant_user_base_kaiadmin.html" %}
+{% load static %}
+
+{% block title %}Demand Schedule — ViewMetric{% endblock %}
+
+{% block extra_head %}
+<style>
+  .kai-edit-slots-wrap {
+    max-height: min(70vh, 620px);
+    overflow: auto;
+    border-radius: 12px;
+    border: 1px solid rgba(21, 114, 232, 0.18);
+    box-shadow: 0 6px 24px rgba(21, 114, 232, 0.1);
+    background: #fff;
+  }
+  .kai-edit-slots-table {
+    margin-bottom: 0;
+    --bs-table-striped-bg: rgba(21, 114, 232, 0.055);
+    --bs-table-hover-bg: rgba(21, 114, 232, 0.12);
+    border-color: transparent;
+  }
+  .kai-edit-slots-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: #fff !important;
+    border: none !important;
+    padding-top: 0.9rem !important;
+    padding-bottom: 0.9rem !important;
+    background: linear-gradient(135deg, #1572e8 0%, #1269db 48%, #0d5bbd 100%) !important;
+    box-shadow: 0 3px 10px rgba(21, 114, 232, 0.35);
+  }
+  .kai-edit-slots-table tbody td {
+    vertical-align: middle;
+    padding-top: 0.55rem;
+    padding-bottom: 0.55rem;
+    border-color: rgba(21, 114, 232, 0.1);
+  }
+  .kai-slot-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.1rem;
+    padding: 0.28rem 0.55rem;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 0.8rem;
+    line-height: 1;
+    color: #fff;
+    background: linear-gradient(135deg, #6861ce 0%, #4c4b9e 100%);
+    box-shadow: 0 2px 8px rgba(104, 97, 206, 0.35);
+  }
+  .kai-slot-pill.alt {
+    background: linear-gradient(135deg, #1572e8 0%, #0d5bbd 100%);
+    box-shadow: 0 2px 8px rgba(21, 114, 232, 0.3);
+  }
+  .kai-time-label {
+    color: #1269db;
+    font-weight: 600;
+  }
+  .kai-demand-input {
+    max-width: 140px;
+    border: 1px solid rgba(21, 114, 232, 0.4);
+    background: rgba(21, 114, 232, 0.07);
+    font-weight: 600;
+    color: #1a1d2e;
+    border-radius: 8px;
+  }
+  .kai-demand-input:focus {
+    border-color: #1572e8;
+    background: #fff;
+    box-shadow: 0 0 0 0.2rem rgba(21, 114, 232, 0.22);
+  }
+  .kai-demand-input:disabled {
+    background: rgba(108, 117, 125, 0.14);
+    border-color: rgba(108, 117, 125, 0.28);
+    color: #495057;
+    font-weight: 600;
+  }
+  .kai-slot-approved-row td {
+    background: #e8f7e9 !important;
+  }
+  .kai-slot-pending-row td {
+    background: #fff7cc !important;
+  }
+  .kai-hour-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.25rem;
+    padding: 0.25rem 0.45rem;
+    border-radius: 6px;
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: #0d5bbd;
+    background: rgba(21, 114, 232, 0.14);
+    border: 1px solid rgba(21, 114, 232, 0.25);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+            <div class="mb-3 pt-2">
+              <div class="page-pretitle">Demand entry</div>
+              <h3 class="fw-bold mb-1">Demand schedule (15 minute interval)</h3>
+              <p class="text-muted small mb-0">Enter MW per slot for the selected day.</p>
+            </div>
+
+            <div class="card card-round">
+              <div class="card-header">
+                <div class="card-head-row flex-wrap gap-3">
+                  <div class="card-title mb-0">Slot grid</div>
+                  <div class="card-tools d-flex flex-wrap align-items-center gap-2">
+                    <a class="btn btn-outline-secondary btn-sm" href="{% url 'demand_entry' %}">Back to day list</a>
+                    <label class="small text-muted mb-0 me-1" for="dateSelect">Date</label>
+                    <select id="dateSelect" class="form-select form-select-sm" style="min-width: 12rem" aria-label="Select date">
+                      <option value="">Loading…</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <div class="card-body">
+                <div class="form-check mb-3">
+                  <input class="form-check-input" id="shutdownCheckbox" type="checkbox" />
+                  <label class="form-check-label small" for="shutdownCheckbox">Shutdown this day (sets all slots to 0)</label>
+                </div>
+
+                <div id="excelUploadSection" class="card mb-3 d-none">
+                  <div class="card-body">
+                    <h6 class="fw-bold mb-2"><i class="fas fa-file-excel text-success me-2"></i>Excel template &amp; import</h6>
+                    <p class="text-muted small mb-3">
+                      Download the blank template for this day, fill the <strong>Demand (MW)</strong> column for all 96 slots (Slot 1–96), then upload to populate the table below. Columns must stay named <strong>Slot</strong> and <strong>Demand (MW)</strong> (or <strong>Demand</strong>).
+                    </p>
+                    <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+                      <button type="button" id="downloadTemplateBtn" class="btn btn-sm btn-success">
+                        <i class="fas fa-download me-1"></i>Download template (.xlsx)
+                      </button>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2 align-items-center">
+                      <input type="file" id="excelFileInput" class="form-control form-control-sm" accept=".xlsx,.xls" style="max-width: 320px" />
+                      <button type="button" id="uploadExcelBtn" class="btn btn-sm btn-outline-success">
+                        <i class="fas fa-upload me-1"></i>Upload &amp; fill slots
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="kai-sched-table">
+                  <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                      <label class="small text-muted mb-0 fw-semibold text-uppercase" for="hourFilterSelect" style="letter-spacing: 0.06em">Hour</label>
+                      <select id="hourFilterSelect" class="form-select form-select-sm" style="min-width: 15rem" aria-label="Show slots for one hour or all">
+                        <option value="">All hours</option>
+                      </select>
+                    </div>
+                    <small class="text-muted" id="hourFilterHint">All 96 quarter-hour slots.</small>
+                  </div>
+
+                  <div class="kai-edit-slots-wrap table-responsive">
+                    <table class="table table-striped table-hover align-middle kai-edit-slots-table mb-0" id="slotsTable">
+                      <thead>
+                        <tr>
+                          <th style="width: 76px">Hour</th>
+                          <th style="width: 72px">Slot</th>
+                          <th style="width: 200px">Time block</th>
+                          <th>Demand (MW)</th>
+                        </tr>
+                      </thead>
+                      <tbody></tbody>
+                    </table>
+                  </div>
+
+                  <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mt-4 pt-3 border-top">
+                    <div class="text-muted small">
+                      <strong class="text-dark">Total demand:</strong> <span id="totalDemand" class="text-primary fw-bold">0</span> MW
+                    </div>
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                      <button type="button" id="saveBtn" class="btn btn-primary">
+                        <span class="btn-label"><i class="fas fa-save"></i></span>
+                        Save / submit demand schedule
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <p class="small mt-3 mb-0" id="statusMsg" aria-live="polite"></p>
+              </div>
+            </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<script>
+(function () {
+  try {
+    var t = localStorage.getItem('accessToken');
+    if (t) {
+      var payload = JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+      var r = String(payload.role || '').toUpperCase().replace(/\s+/g, '_');
+      if (r === 'CONSUMER_MANAGER') { window.location.replace('{% url "consumer_demand_entry" %}'); return; }
+      if (r === 'GENERATOR') { window.location.replace('{% url "generator_dashboard" %}'); return; }
+    }
+  } catch (e) {}
+
+  var fetchWithAuth = window.kaiFetchWithAuth;
+  if (!fetchWithAuth) return;
+
+  function escapeHtml(s) {
+    if (s == null || s === '') return '';
+    var div = document.createElement('div');
+    div.textContent = s;
+    return div.innerHTML;
+  }
+
+  function formatDemandDisplay(v) {
+    var n = Math.abs(Number(v));
+    if (Number.isNaN(n)) return '0.0';
+    return n.toFixed(1);
+  }
+
+  var initialDateFromServer = '{{ date_str }}';
+  var shutdownCheckbox = document.getElementById('shutdownCheckbox');
+  var slotsTbody = document.getElementById('slotsTable').querySelector('tbody');
+  var totalDemandEl = document.getElementById('totalDemand');
+  var statusMsg = document.getElementById('statusMsg');
+  var dateSelect = document.getElementById('dateSelect');
+  var hourFilterSelect = document.getElementById('hourFilterSelect');
+  var hourFilterHint = document.getElementById('hourFilterHint');
+  var slotsScrollWrap = document.querySelector('.kai-edit-slots-wrap');
+  var excelUploadSection = document.getElementById('excelUploadSection');
+  var downloadTemplateBtn = document.getElementById('downloadTemplateBtn');
+  var excelFileInput = document.getElementById('excelFileInput');
+  var uploadExcelBtn = document.getElementById('uploadExcelBtn');
+  var currentReadOnly = false;
+
+  function setStatus(msg, ok) {
+    if (ok === undefined) ok = true;
+    statusMsg.textContent = msg || '';
+    statusMsg.classList.remove('text-success', 'text-danger', 'text-muted');
+    if (!msg) statusMsg.classList.add('text-muted');
+    else statusMsg.classList.add(ok ? 'text-success' : 'text-danger');
+  }
+
+  function toDateStr(d) {
+    var yyyy = d.getFullYear();
+    var mm = String(d.getMonth() + 1).padStart(2, '0');
+    var dd = String(d.getDate()).padStart(2, '0');
+    return yyyy + '-' + mm + '-' + dd;
+  }
+
+  function buildAllowedDates() {
+    var base = new Date();
+    base.setHours(0, 0, 0, 0);
+    var out = [];
+    for (var i = 0; i <= 30; i++) {
+      var d = new Date(base.getTime() + i * 24 * 60 * 60 * 1000);
+      out.push({
+        dateStr: toDateStr(d),
+        label: i === 0 ? 'Today' : d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }),
+      });
+    }
+    return out;
+  }
+
+  var allowedDates = buildAllowedDates();
+  dateSelect.innerHTML = '';
+  allowedDates.forEach(function (d) {
+    var opt = document.createElement('option');
+    opt.value = d.dateStr;
+    opt.textContent = d.label;
+    dateSelect.appendChild(opt);
+  });
+
+  var initialAllowed = allowedDates.some(function (d) { return d.dateStr === initialDateFromServer; });
+  dateSelect.value = initialAllowed ? initialDateFromServer : allowedDates[0].dateStr;
+
+  var selectedDateStr = dateSelect.value;
+
+  function slotHourFromIndex(slotIndex) {
+    var si = parseInt(slotIndex, 10);
+    if (Number.isNaN(si)) return 0;
+    return Math.min(23, Math.max(0, Math.floor((si - 1) / 4)));
+  }
+
+  function populateHourFilterOptions() {
+    if (!hourFilterSelect) return;
+    var keep = hourFilterSelect.value;
+    hourFilterSelect.innerHTML = '<option value="">All hours</option>';
+    for (var h = 0; h < 24; h++) {
+      var hh = String(h).padStart(2, '0');
+      var opt = document.createElement('option');
+      opt.value = String(h);
+      opt.textContent = 'Hour ' + hh + ' (' + hh + ':00 – ' + hh + ':45)';
+      hourFilterSelect.appendChild(opt);
+    }
+    if (keep !== '' && hourFilterSelect.querySelector('option[value="' + keep + '"]')) {
+      hourFilterSelect.value = keep;
+    }
+  }
+
+  function applyHourFilter() {
+    if (!hourFilterSelect) return;
+    var v = hourFilterSelect.value;
+    var rows = slotsTbody.querySelectorAll('tr[data-hour]');
+    rows.forEach(function (tr) {
+      if (v === '') tr.classList.remove('d-none');
+      else tr.classList.toggle('d-none', tr.getAttribute('data-hour') !== v);
+    });
+    if (hourFilterHint) {
+      if (v === '') hourFilterHint.textContent = 'All 96 quarter-hour slots.';
+      else
+        hourFilterHint.textContent =
+          'Showing hour ' + v + ' only (4 slots). Choose All hours for the full day.';
+    }
+    if (v !== '' && slotsScrollWrap) {
+      var first = slotsTbody.querySelector('tr[data-hour="' + v + '"]');
+      if (first) first.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    }
+  }
+
+  populateHourFilterOptions();
+  if (hourFilterSelect) {
+    hourFilterSelect.addEventListener('change', applyHourFilter);
+  }
+
+  function updateTotalDemand() {
+    var inputs = slotsTbody.querySelectorAll('input.demandInput');
+    var total = 0;
+    inputs.forEach(function (inp) {
+      total += parseFloat(inp.value || '0') || 0;
+    });
+    totalDemandEl.textContent = formatDemandDisplay(total);
+  }
+
+  function isViewMode() {
+    var params = new URLSearchParams(window.location.search);
+    return params.get('mode') === 'view';
+  }
+
+  function timeBlockForSlot(slotIndex) {
+    var i = parseInt(slotIndex, 10);
+    if (Number.isNaN(i) || i < 1 || i > 96) return '';
+    var startMin = (i - 1) * 15;
+    var endMin = i * 15;
+    function fmtHm(totalMin) {
+      if (totalMin >= 24 * 60) return '24:00';
+      var h = Math.floor(totalMin / 60);
+      var mm = totalMin % 60;
+      return String(h).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
+    }
+    return fmtHm(startMin) + ' – ' + fmtHm(endMin);
+  }
+
+  function downloadDemandTemplateExcel() {
+    if (!window.XLSX) {
+      setStatus('Excel library not loaded. Refresh the page.', false);
+      return;
+    }
+    var rows = [['Slot', 'Time block', 'Demand (MW)']];
+    for (var s = 1; s <= 96; s++) {
+      rows.push([s, timeBlockForSlot(s), '']);
+    }
+    var ws = XLSX.utils.aoa_to_sheet(rows);
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Demand');
+    var fname = 'demand_template_' + selectedDateStr + '.xlsx';
+    XLSX.writeFile(wb, fname);
+    setStatus('Downloaded ' + fname + '. Fill the Demand column and use Upload & fill slots.', true);
+  }
+
+  /** Reject time-like labels; avoid parseFloat("00:00") === 0 mis-reading time blocks as demand. */
+  function parsePlainDemandMw(cell) {
+    if (cell == null || cell === '') return NaN;
+    if (typeof cell === 'number' && Number.isFinite(cell)) return cell;
+    var s = String(cell).trim();
+    if (!s) return NaN;
+    if (/:/.test(s) || /–|—/.test(s)) return NaN;
+    if (!/^-?\d+(\.\d+)?$/.test(s)) return NaN;
+    var n = parseFloat(s);
+    return Number.isFinite(n) ? n : NaN;
+  }
+
+  /**
+   * Read MW from the Demand header column, or the next columns if that cell is empty
+   * (common when values are pasted one column right of "Demand (MW)" in LibreOffice/Excel).
+   */
+  function readDemandMwFromRow(row, slotCol, demandCol) {
+    var start = demandCol >= 0 ? demandCol : 0;
+    var maxScan = Math.min(row.length, start + 6);
+    for (var c = start; c < maxScan; c++) {
+      if (c === slotCol) continue;
+      var v = parsePlainDemandMw(row[c]);
+      if (!Number.isNaN(v)) {
+        if (v < 0) v = 0;
+        return v;
+      }
+    }
+    return NaN;
+  }
+
+  function parseExcelAndFillDemandSlots(file) {
+    if (!file) {
+      setStatus('Please choose an Excel file.', false);
+      return;
+    }
+    if (!window.XLSX) {
+      setStatus('Excel parser not available.', false);
+      return;
+    }
+
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      try {
+        var data = new Uint8Array(e.target.result);
+        var workbook = XLSX.read(data, { type: 'array' });
+        var sheet = workbook.Sheets[workbook.SheetNames[0]];
+        var rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' });
+        if (!rows || rows.length < 2) {
+          setStatus('Invalid Excel: no data rows found.', false);
+          return;
+        }
+
+        var header = (rows[0] || []).map(function (h) { return String(h || '').toLowerCase(); });
+        var slotCol = header.findIndex(function (h) { return h.indexOf('slot') !== -1; });
+        var demandCol = header.findIndex(function (h) { return h.indexOf('demand') !== -1; });
+        if (slotCol === -1) slotCol = 0;
+        if (demandCol === -1) demandCol = header.length > 1 ? header.length - 1 : 1;
+
+        var map = {};
+        for (var i = 1; i < rows.length; i++) {
+          var row = rows[i] || [];
+          var slot = parseInt(row[slotCol], 10);
+          var demand = readDemandMwFromRow(row, slotCol, demandCol);
+          if (!Number.isNaN(slot) && slot >= 1 && slot <= 96 && !Number.isNaN(demand)) {
+            map[slot] = demand;
+          }
+        }
+
+        var keys = Object.keys(map);
+        if (keys.length !== 96) {
+          setStatus(
+            'Need 96 slots with demand values. Found ' +
+              keys.length +
+              ' valid rows. Fill rows for slots 1–96 under Demand (MW), or directly to the right if that column is blank.',
+            false
+          );
+          return;
+        }
+
+        var missing = [];
+        for (var s = 1; s <= 96; s++) {
+          if (!Object.prototype.hasOwnProperty.call(map, String(s))) missing.push(s);
+        }
+        if (missing.length) {
+          setStatus(
+            'Excel missing slots: ' + missing.slice(0, 10).join(', ') + (missing.length > 10 ? '...' : ''),
+            false
+          );
+          return;
+        }
+
+        var inputs = slotsTbody.querySelectorAll('input.demandInput');
+        if (inputs.length !== 96) {
+          setStatus('Table is not ready. Please wait and retry.', false);
+          return;
+        }
+
+        shutdownCheckbox.checked = false;
+        inputs.forEach(function (inp) {
+          inp.disabled = false;
+          var slotIndex = parseInt(inp.getAttribute('data-slot-index'), 10);
+          inp.value = formatDemandDisplay(map[slotIndex] || 0);
+        });
+        updateTotalDemand();
+        setStatus('Excel loaded successfully (96 slots). Review and click Save.', true);
+      } catch (err) {
+        setStatus('Failed to parse Excel: ' + (err && err.message ? err.message : 'Unknown error'), false);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  async function loadDay(dateToLoad, opts) {
+    opts = opts || {};
+    selectedDateStr = dateToLoad;
+    slotsTbody.innerHTML = '<tr><td colspan="4" class="px-3 py-3 text-muted">Loading…</td></tr>';
+    setStatus('', true);
+
+    var res = await fetchWithAuth('/api/demand-entry/?date=' + encodeURIComponent(dateToLoad));
+    var data = await res.json().catch(function () { return {}; });
+    if (!res.ok) {
+      var errMsg = data.detail || 'Failed to load schedule';
+      if (res.status === 403) errMsg = 'Access denied. This page is for plant users only.';
+      slotsTbody.innerHTML = '<tr><td colspan="4" class="px-3 py-3 text-danger">' + errMsg + '</td></tr>';
+      setStatus(errMsg, false);
+      return;
+    }
+
+    var allocApproved = false;
+    var slotApprovedMap = {};
+    try {
+      var ar = await fetchWithAuth('/api/dashboard/slots/?date=' + encodeURIComponent(dateToLoad));
+      var ad = await ar.json().catch(function () { return {}; });
+      allocApproved = !!ad.approved;
+      (ad.slots || []).forEach(function (s) {
+        var si = parseInt(s.slot_index, 10);
+        if (si >= 1 && si <= 96) slotApprovedMap[si] = (s.slot_approved === true);
+      });
+    } catch (e) {}
+
+    var shutdown = opts.forceShutdownUnchecked ? false : !!data.shutdown;
+    shutdownCheckbox.checked = shutdown;
+
+    slotsTbody.innerHTML = '';
+    var total = 0;
+    var readOnly = allocApproved || isViewMode();
+    currentReadOnly = readOnly;
+    var inputsDisabled = shutdown || readOnly;
+
+    (data.slots || []).forEach(function (slot, idx) {
+      var tr = document.createElement('tr');
+      var hour = slotHourFromIndex(slot.slot_index);
+      var si = parseInt(slot.slot_index, 10);
+      var isSlotApproved = !!slotApprovedMap[si];
+      tr.className = isSlotApproved ? 'kai-slot-approved-row' : 'kai-slot-pending-row';
+      tr.setAttribute('data-hour', String(hour));
+      var timeLabel = slot.time_block || slot.slot_time || '';
+      var pillClass = 'kai-slot-pill' + (idx % 2 === 0 ? '' : ' alt');
+      var hh = String(hour).padStart(2, '0');
+      var dis = inputsDisabled ? ' disabled' : '';
+      tr.innerHTML =
+        '<td><span class="kai-hour-badge">' +
+        hh +
+        '</span></td>' +
+        '<td><span class="' +
+        pillClass +
+        '">' +
+        escapeHtml(String(slot.slot_index)) +
+        '</span></td>' +
+        '<td><span class="kai-time-label">' +
+        escapeHtml(timeLabel) +
+        '</span></td>' +
+        '<td>' +
+        '<input class="form-control form-control-sm demandInput kai-demand-input" data-slot-index="' +
+        slot.slot_index +
+        '" type="number" step="0.01" min="0" value="' +
+        formatDemandDisplay(slot.demand_mw) +
+        '"' +
+        dis +
+        '/></td>';
+      slotsTbody.appendChild(tr);
+      if (!shutdown) total += Number(slot.demand_mw || 0);
+    });
+
+    applyHourFilter();
+
+    if (!inputsDisabled) {
+      slotsTbody.querySelectorAll('input.demandInput').forEach(function (inp) {
+        inp.addEventListener('input', updateTotalDemand);
+      });
+    }
+    totalDemandEl.textContent = shutdown ? formatDemandDisplay(0) : formatDemandDisplay(total);
+    var saveBtn = document.getElementById('saveBtn');
+    if (saveBtn) {
+      if (readOnly) {
+        saveBtn.disabled = true;
+        saveBtn.innerHTML =
+          '<span class="btn-label"><i class="fas fa-eye"></i></span> ' +
+          (allocApproved ? 'Approved — editing locked' : 'View only');
+        saveBtn.classList.remove('btn-primary');
+        saveBtn.classList.add('btn-label-secondary');
+      } else {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML =
+          '<span class="btn-label"><i class="fas fa-save"></i></span> Save / submit demand schedule';
+        saveBtn.classList.remove('btn-label-secondary');
+        saveBtn.classList.add('btn-primary');
+      }
+    }
+    if (excelUploadSection) excelUploadSection.classList.toggle('d-none', readOnly);
+    if (downloadTemplateBtn) downloadTemplateBtn.disabled = readOnly;
+    if (excelFileInput) excelFileInput.disabled = readOnly;
+    if (uploadExcelBtn) uploadExcelBtn.disabled = readOnly;
+    if (readOnly) {
+      shutdownCheckbox.disabled = true;
+      setStatus(
+        allocApproved ? 'This day is approved by Consumer Manager. Editing is disabled.' : 'View only mode.',
+        true
+      );
+    } else {
+      shutdownCheckbox.disabled = false;
+    }
+    if (!readOnly) setStatus('', true);
+  }
+
+  shutdownCheckbox.addEventListener('change', async function () {
+    if (shutdownCheckbox.checked) {
+      var inputs = Array.from(slotsTbody.querySelectorAll('input.demandInput'));
+      inputs.forEach(function (inp) {
+        inp.value = '0';
+        inp.disabled = true;
+      });
+      totalDemandEl.textContent = formatDemandDisplay(0);
+      return;
+    }
+    await loadDay(selectedDateStr, { forceShutdownUnchecked: true });
+  });
+
+  async function saveDay() {
+    var shutdown = shutdownCheckbox.checked;
+    var inputs = Array.from(slotsTbody.querySelectorAll('input.demandInput'));
+    if (inputs.length !== 96) {
+      setStatus('Schedule table is not ready (need 96 slots).', false);
+      return;
+    }
+
+    var slots = inputs.map(function (inp) {
+      return {
+        slot_index: parseInt(inp.getAttribute('data-slot-index'), 10),
+        demand_mw: parseFloat(inp.value || '0'),
+      };
+    });
+
+    var payload = { date: selectedDateStr, shutdown: shutdown, slots: slots };
+    setStatus('Saving…', true);
+
+    var res = await fetchWithAuth('/api/demand-entry/', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    var data = await res.json().catch(function () { return {}; });
+    if (!res.ok) {
+      setStatus(data.detail || 'Save failed', false);
+      return;
+    }
+    setStatus('Saved successfully.', true);
+    window.location.href = '{% url "demand_entry" %}';
+  }
+
+  document.getElementById('saveBtn').addEventListener('click', saveDay);
+
+  if (downloadTemplateBtn) {
+    downloadTemplateBtn.addEventListener('click', function () {
+      if (currentReadOnly) {
+        setStatus('Download is disabled while viewing or when approved.', false);
+        return;
+      }
+      downloadDemandTemplateExcel();
+    });
+  }
+
+  if (uploadExcelBtn && excelFileInput) {
+    uploadExcelBtn.addEventListener('click', function () {
+      if (currentReadOnly) return;
+      parseExcelAndFillDemandSlots(excelFileInput.files && excelFileInput.files[0]);
+    });
+  }
+
+  dateSelect.addEventListener('change', async function () {
+    selectedDateStr = dateSelect.value;
+    await loadDay(selectedDateStr);
+  });
+
+  loadDay(selectedDateStr);
+})();
+</script>
+{% endblock %}

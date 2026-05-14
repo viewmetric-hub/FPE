@@ -1,0 +1,19 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}Energy Intelligence{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  {% include 'dashboard/includes/vm_theme_overrides.html' %}
+  {% include 'dashboard/includes/viewmetric_head.html' %}
+  {% block extra_head %}{% endblock %}
+</head>
+<body class="bg-[#F7F9FB] text-gray-800 antialiased min-h-screen overflow-x-hidden">
+{% block body %}
+{% block content %}{% endblock %}
+{% endblock %}
+{% block extra_scripts %}{% endblock %}
+</body>
+</html>
